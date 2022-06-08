@@ -85,8 +85,10 @@ kernel can be slow if the threads in a wavefront are accessing parts of memory t
 far away from each other because the wavefront will have to do multiple serialized memory
 accesses so that all the threads in the wavefront can get the data they need. Because of
 the lockstep nature, the entire wavefront is being held up waiting on threads to get their
-data.If you write your kernel such that adjacent threads access adjacent pieces of memory,
-you reduce the number of memory accesses and speed up the kernel.
+data. If you write your kernel such that adjacent threads access adjacent pieces of
+memory, you utilize the cache better. This reduces the number of memory accesses and speed
+up the kernel. This is called memory coalescing and is an important consideration for fast
+GPU code.
 
 ### Grid
 
@@ -155,9 +157,20 @@ __global__ void vecAdd(double *a, double *b, double *c, int n)
         c[id] = a[id] + b[id];
 }
 ```
+
 This is the piece of code, called the _kernel_, that is actually run on the GPU
-hardware. (TODO: write about what blockidx and blockdim and threadidx are, how it is
-calculated, why we have to do that, and why we have the bounds check id<n)
+hardware. This kernel is defined here and is later launched by a call to
+`hipLaunchKernelGGL`. The same kernel is run by some number of threads as determined by
+the number of blocks and number of threads per block that we define as part of the launch
+call. We will see more about `hipLaunchKernelGGL` later. It is useful for the kernel to be
+written such that work is split up between the threads, so that each thread is working on
+a small portion of the data. HIP provides `blockIdx`, `blockDim`, and `threadIdx` in the
+kernel to identify the thread. In our example, we use this so that only the thread with
+that particular index performs the addition on the values in the a, b, and c array with
+that same index. There's a possibility that the number of threads that we start exceed the size
+of the arrays, so we do a bounds check to make sure only the threads within the size range
+of the arrays operate on them. Come back and read this again after you read about kernel
+launching later in this tutorial.
 
 
 ```
@@ -201,16 +214,20 @@ This launches the GPU _kernel_ we defined earlier. The parameters you see are:
   problem surface is 2D or 3D, setup your grid accordingly. In our case for vector add, we
   are just adding two 1D vectors, so a 1D grid is appropriate here.
   
-* dim3(blockSize) - this passes a 3d grid defining the total number of threads in a single
-  block. In our example we have 1024 threads in a block (remember that a block is
-  different from a wavefront). Similar to gridSize, using more than one dimension allows
-  us to use `threadIdx.y` and `'threadIdx.z` as well to identify the current thread.
-* 0 `size_t dynamicShared`  - Amount of additional shared memory to allocate when launching the kernel 
+* dim3(blockSize) - this defines the total number of threads in a single block, using up
+  to three dimensions. In our example we have 1024 threads in a block (remember that a
+  block is different from a wavefront) along just one dimension. Similar to gridSize,
+  using more than one dimension allows us to use `threadIdx.y` and `'threadIdx.z` as well
+  to identify the current thread.
+* 0 (type: `size_t`)  - Amount of additional shared memory to allocate in the GPU when launching the kernel 
 
 * 0 `hipStream_t` - The stream where the kernel should execute. A value of 0 corresponds
-  to the NULL stream. Streams allow separation of concerns. (TODO: elaborate on what
-  streams are supposed to do).
-(TODO: what is hiplaunchkernelggl, provide more info. what does the ggl stand for?)
+  to the NULL stream. Streams allow separation of concerns. Streams also allow you to overlap
+  different kernel launches or copies between host and device, instead of doing them one
+  at a time. This increases our
+  concurrency and could allow us to overlap a kernel launch in one stream while data copy
+  is happening in another stream. We will cover streams in a different tutorial. [Here is a
+  brief explanation of how streams work in Cuda](https://leimao.github.io/blog/CUDA-Stream/).
 
 
 ```
@@ -218,7 +235,7 @@ hipError_t hipErrSync  = hipGetLastError();
 hipError_t hipErrAsync = hipDeviceSynchronize();
 ```
 It is useful to perform these error checks to catch any issues that might have occured
-during the kernel launch. (TODO: elaborate more on this).
+during the kernel launch.
 
 ```
 hipErrorCheck(hipMemcpy( h_c, d_c, bytes, hipMemcpyDeviceToHost));
@@ -230,10 +247,11 @@ earlier so we can inspect it.
 
 ## Additional Resources
 
-(TODO: links to rocm and hip docs)
-(TODO: add links to videos)
 Fundamentals of HIP programming: [https://developer.amd.com/resources/rocm-learning-center/fundamentals-of-hip-programming/](https://developer.amd.com/resources/rocm-learning-center/fundamentals-of-hip-programming/)
 AMD GPU hardware: https://www.youtube.com/watch?v=uu-3aEyesWQ
-
+Main AMD documentation: https://docs.amd.com/
 
 ## Exercises
+TODO: add exercises
+1. Try playing around with the size of the arrays, blocks, and grid size.
+2. What errors do you run into when you don't have the bounds check in the kernel.
