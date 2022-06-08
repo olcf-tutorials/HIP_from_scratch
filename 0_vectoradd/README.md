@@ -9,20 +9,6 @@ with its cuda-hip module. The full example code can be found in the file
 vadd_hip.cpp in this repository.
 
 
-## Prerequisites
-
-Make sure you have access to a system with HIP installed with a ROCm or CUDA backend.
-
-On Summit
-```
-$ module load cuda/11.4.0
-$ module load hip-cuda/5.1.0
-```
-
-On Spock
-```
-$ module load rocm/5.1.0
-```
 
 ## What is HIP
 The Heterogeneous Interface for Portability (HIP) is AMD’s dedicated GPU programming
@@ -82,6 +68,7 @@ wavefront are finished with the current instruction. This is something to keep i
 when doing memory access as part of your kernel. During a memory access whole block of
 memory is placed in the cache even if you only need a small part of the memory. Your
 kernel can be slow if the threads in a wavefront are accessing parts of memory that are
+
 far away from each other because the wavefront will have to do multiple serialized memory
 accesses so that all the threads in the wavefront can get the data they need. Because of
 the lockstep nature, the entire wavefront is being held up waiting on threads to get their
@@ -117,7 +104,30 @@ memcpy the data into the device memory. We will launch the kernel that will perf
 vector addition with the data in the device memory. And we'll copy the result back into
 host memory. 
 
-## Building and running the code on Summit
+## Building and running the code
+
+
+Make sure you have access to a system with HIP installed with a ROCm or CUDA backend. 
+
+For Summit, run the following commands
+```
+module load cuda/11.4.0
+module load hip-cuda/5.1.0
+hipcc -o vadd_hip vadd_hip.cpp
+
+# submit job
+bsub submit_summit.lsf
+```
+
+For Spock/Crusher
+```
+module load rocm/5.1.0
+hipcc -o vadd_hip vadd_hip.cpp
+
+# submit job
+sbatch submit_frontier.sbatch
+```
+
 
 ## Parts of the code
 
@@ -254,4 +264,4 @@ Main AMD documentation: https://docs.amd.com/
 ## Exercises
 TODO: add exercises
 1. Try playing around with the size of the arrays, blocks, and grid size.
-2. What errors do you run into when you don't have the bounds check in the kernel.
+2. What errors do you run into when you don't have the bounds check in the kernel?
