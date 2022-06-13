@@ -1,6 +1,13 @@
+This repository contains several tutorials that teach the basic concepts of HIP. These
+tutorials should not require prior knowledge of GPU or CUDA programming, although general
+programming knowledge is necessary.
+
+This a work in progress.
+
+
+
 TODO:
 
-finish detailed vector Add tuorial
-write a monte carlo pi calculation tutorial (HIP+MPI?)
-Hipifying a small example
-Hipifying miniweather
+- write a monte carlo pi calculation tutorial (HIP+MPI?)
+- tutorial on shared memory and memory coalescing
+- tutorial on streams

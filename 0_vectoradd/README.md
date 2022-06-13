@@ -106,7 +106,6 @@ host memory.
 
 ## Building and running the code
 
-
 Make sure you have access to a system with HIP installed with a ROCm or CUDA backend. 
 
 For Summit, run the following commands
@@ -223,14 +222,12 @@ This launches the GPU _kernel_ we defined earlier. The parameters you see are:
   (Note: Choosing a 1D, 2D, or 3D grid depends on the problem your working in. If your
   problem surface is 2D or 3D, setup your grid accordingly. In our case for vector add, we
   are just adding two 1D vectors, so a 1D grid is appropriate here.
-  
 * dim3(blockSize) - this defines the total number of threads in a single block, using up
   to three dimensions. In our example we have 1024 threads in a block (remember that a
   block is different from a wavefront) along just one dimension. Similar to gridSize,
   using more than one dimension allows us to use `threadIdx.y` and `'threadIdx.z` as well
   to identify the current thread.
 * 0 (type: `size_t`)  - Amount of additional shared memory to allocate in the GPU when launching the kernel 
-
 * 0 `hipStream_t` - The stream where the kernel should execute. A value of 0 corresponds
   to the NULL stream. Streams allow separation of concerns. Streams also allow you to overlap
   different kernel launches or copies between host and device, instead of doing them one
@@ -264,4 +261,4 @@ Main AMD documentation: https://docs.amd.com/
 ## Exercises
 TODO: add exercises
 1. Try playing around with the size of the arrays, blocks, and grid size.
-2. What errors do you run into when you don't have the bounds check in the kernel?
+2. What errors do you run into when you don't have the bounds check in the kernel? If it doesn't, why not?
