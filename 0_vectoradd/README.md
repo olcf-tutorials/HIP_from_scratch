@@ -56,7 +56,9 @@ walk through the code later in this tutorial.
 Workgroup (or block) is a collection of threads. A block is assigned to a single compute
 unit in the GPU. All the threads in the block have access to a small amount of shared
 memory. This allows inter thread communication within the block and also useful to avoid
-repeated access to main memory which can be costly.
+repeated access to main memory which can be costly. AMD hardware has an upper limit of 16 
+wavefronts per block (so a max of 1024 threads per block). Trying to set a block size 
+bigger than that will result in errors.
 
 ### Wavefront (CUDA term: Warp)
 (TODO: have someone go through and correct the language and the information to get proper accuracy)
@@ -262,3 +264,4 @@ Main AMD documentation: https://docs.amd.com/
 TODO: add exercises
 1. Try playing around with the size of the arrays, blocks, and grid size.
 2. What errors do you run into when you don't have the bounds check in the kernel? If it doesn't, why not?
+3. Try adjusting the blockSize so that it is greater than 1024. What happens?
