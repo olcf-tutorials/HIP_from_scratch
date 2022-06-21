@@ -105,6 +105,53 @@ hipcc -o matrix_sums_unoptimized matrix_sums_unoptimized.cpp
 sbatch submit_frontier_unoptimized.sbatch
 ```
 
+The submit scripts for Summit and Crusher run the executable with the nsys profiler and
+the rocprof profiler respectively.
+
+#### Examining the Results of the Kernel Profiling
+
+From the output file of the Summit run, you will see a section titled `CUDA Kernel
+Statistics` with the table summarizing the run time of
+the two kernels. It will look something like this
+
+```
+CUDA Kernel Statistics:
+
+ Time(%)  Total Time (ns)  Instances  Average (ns)  Minimum (ns)  Maximum (ns)  StdDev (ns)                         Name
+ -------  ---------------  ---------  ------------  ------------  ------------  -----------  --------------------------------------------------
+    60.0          3263784          1     3263784.0       3263784       3263784          0.0  row_sums(const float *, float *, unsigned long)
+    40.0          2176528          1     2176528.0       2176528       2176528          0.0  column_sums(const float *, float *, unsigned long)
+```
+
+You will notice that the `row_sums` kernel is actually slower than the `column_sums`
+kernel. Why is that?
+
+This is because the `column_sums` kernel actually makes better use of _memory
+coalescing_. Recall that when you read a piece of data from memory, it will load that
+memory into the cache along with some data that was adjacent to it because there is a
+reasonable assumption that if you need some data you will likely also need the data next
+to it. We can take advantage of this by making sure that threads that are adjacent to each
+other (i.e. threads in the same block or same wavefront even) make use data that is
+adjacent to each other. So for `column_sums`, when thread with `idx 0` accesses A[0], `idx
+1` accesses A[1], `idx 2` accesses A[2] and so on. Since A[1], A[2], A[3] are all adjacent
+to each other, they will all brought to the cache together, and we don't have to do
+separate memory lookups for getting the data for `idx 2` and `idx 3` which are executing
+in the same wavefront. This saves a lot of time.
+
+Contrast this with `row_sums`. When `idx 0` accesses A[0], `idx 1` is accessing `A[1*ds ==
+16384]`, `idx 2` is accessing `A[2*ds == 32768]` and so on. Since `idx` 0,1,2 are all in
+the same wavefront but are accessing data that is far away from each other, the data is
+not all in the cache and each thread will have to wait for a cache miss to happen, the
+data to be copied from memory into the cache, and then do its operation. And since threads
+in a wavefront execute in lockstep, each time a memory access happens the whole wavefront
+is held up because each thread in the wavefront is effectively being serviced one at a
+time rather than all at once. So you can see how this can slow things down a lot. There is
+no _memory coalescing_ here.
+
+(TODO: draw a diagram to accompany the above explanation).
+
+(TODO: when rocprof timing information is fixed, add a section covering the rocprof output
+as well).
 
 
 (TODO: Try creating an example where you are summing the
