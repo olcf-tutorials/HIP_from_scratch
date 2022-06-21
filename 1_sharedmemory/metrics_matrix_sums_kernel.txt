@@ -1,0 +1,4 @@
+pmc: TCC_EA_WRREQ_sum, TCC_EA_RDREQ_sum, TCC_HIT_sum, TCC_MISS_sum, SQ_LDS_BANK_CONFLICT
+range: 0:1
+gpu: 0
+kernel: row_sums column_sums

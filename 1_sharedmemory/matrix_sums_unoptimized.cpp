@@ -2,86 +2,115 @@
 #include <stdio.h>
 
 // error checking macro
-#define hipErrorCheck(call)                                                              \
-do{                                                                                       \
-    hipError_t hipErr = call;                                                             \
-    if(hipSuccess != hipErr){                                                             \
-      printf("HIP Error - %s:%d: '%s'\n", __FILE__, __LINE__, hipGetErrorString(hipErr));\
-      exit(0);                                                                            \
-    }                                                                                     \
-}while(0)
+#define hipErrorCheck(call)                                                    \
+  do {                                                                         \
+    hipError_t hipErr = call;                                                  \
+    if (hipSuccess != hipErr) {                                                \
+      printf("HIP Error - %s:%d: '%s'\n", __FILE__, __LINE__,                  \
+             hipGetErrorString(hipErr));                                       \
+      exit(0);                                                                 \
+    }                                                                          \
+  } while (0)
 
-const size_t DSIZE = 16384;      // matrix side dimension
-const int block_size = 256;  // HIP maximum is 1024
+const size_t DSIZE = 16384; // matrix side dimension
+const int block_size = 256; // HIP maximum is 1024
 
 // matrix row-sum kernel
-__global__ void row_sums(const float *A, float *sums, size_t ds){
-  int idx = threadIdx.x+blockDim.x*blockIdx.x; // create typical 1D thread index from built-in variables
-  if (idx < ds){
-    float sum = 0.0f;
-    for (size_t i = 0; i < ds; i++)
-      sum += A[idx*ds+i];         // write a for loop that will cause the thread to iterate across a row, keeeping a running sum, and write the result to sums
-    sums[idx] = sum;
-}}
+__global__ void row_sums(const float *A, float *sums, size_t ds) {
 
-// matrix column-sum kernel
-__global__ void column_sums(const float *A, float *sums, size_t ds){
-  int idx = threadIdx.x+blockDim.x*blockIdx.x; // create typical 1D thread index from built-in variables
-  if (idx < ds){
+  // create typical 1D thread index from built-in variables
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  if (idx < ds) {
     float sum = 0.0f;
-    for (size_t i = 0; i < ds; i++)
-      sum += A[idx+ds*i];         // write a for loop that will cause the thread to iterate down a column, keeeping a running sum, and write the result to sums
-    sums[idx] = sum;
-}}
 
-bool validate(float *data, size_t sz){
-  for (size_t i = 0; i < sz; i++)
-    if (data[i] != (float)sz) {printf("results mismatch at %lu, was: %f, should be: %f\n", i, data[i], (float)sz); return false;}
-    return true;
+    // write a for loop that will cause the thread to iterate across
+    // a row, keeping a running sum, and write the result to sums
+    for (size_t i = 0; i < ds; i++)
+      sum += A[idx * ds + i];
+    sums[idx] = sum;
+  }
 }
 
-int main(){
-  float *h_A, *h_sums, *d_A, *d_sums;
-  h_A = new float[DSIZE*DSIZE];  // allocate space for data in host memory
-  h_sums = new float[DSIZE]();
-    
-  for (int i = 0; i < DSIZE*DSIZE; i++)  // initialize matrix in host memory
-    h_A[i] = 1.0f;
-    
-  hipErrorCheck(hipMalloc(&d_A, DSIZE*DSIZE*sizeof(float)));  // allocate device space for A
-  hipErrorCheck(hipMalloc(&d_sums, DSIZE*sizeof(float)));  // allocate device space for vector d_sums
-    
-  // copy matrix A to device:
-  hipErrorCheck(hipMemcpy(d_A, h_A, DSIZE*DSIZE*sizeof(float), hipMemcpyHostToDevice));
-    
-  int grid_size = (DSIZE+block_size-1)/block_size;
+// matrix column-sum kernel
+__global__ void column_sums(const float *A, float *sums, size_t ds) {
+  // create typical 1D thread index from built-in variables
 
-  hipLaunchKernelGGL(row_sums, dim3(grid_size), dim3(block_size), 0, 0, d_A, d_sums, DSIZE);
-  // Check for errors in kernel launch (e.g. invalid execution configuration paramters)
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  if (idx < ds) {
+    float sum = 0.0f;
+
+    // write a for loop that will cause the thread to
+    // iterate down a column, keeeping a running sum,
+    // and write the result to sums
+    for (size_t i = 0; i < ds; i++)
+      sum += A[idx + ds * i];
+    sums[idx] = sum;
+  }
+}
+
+bool validate(float *data, size_t sz) {
+  for (size_t i = 0; i < sz; i++)
+    if (data[i] != (float)sz) {
+      printf("results mismatch at %lu, was: %f, should be: %f\n", i, data[i],
+             (float)sz);
+      return false;
+    }
+  return true;
+}
+
+int main() {
+  float *h_A, *h_sums, *d_A, *d_sums;
+  h_A = new float[DSIZE * DSIZE]; // allocate space for data in host memory
+  h_sums = new float[DSIZE]();
+
+  for (int i = 0; i < DSIZE * DSIZE; i++) // initialize matrix in host memory
+    h_A[i] = 1.0f;
+
+  hipErrorCheck(hipMalloc(
+      &d_A, DSIZE * DSIZE * sizeof(float))); // allocate device space for A
+  hipErrorCheck(hipMalloc(
+      &d_sums,
+      DSIZE * sizeof(float))); // allocate device space for vector d_sums
+
+  // copy matrix A to device:
+  hipErrorCheck(hipMemcpy(d_A, h_A, DSIZE * DSIZE * sizeof(float),
+                          hipMemcpyHostToDevice));
+
+  int grid_size = (DSIZE + block_size - 1) / block_size;
+
+  hipLaunchKernelGGL(row_sums, dim3(grid_size), dim3(block_size), 0, 0, d_A,
+                     d_sums, DSIZE);
+  // Check for errors in kernel launch (e.g. invalid execution configuration
+  // paramters)
   hipErrorCheck(hipGetLastError());
   // Check for errors on the GPU after control is returned to CPU
   hipErrorCheck(hipDeviceSynchronize());
-    
+
   // copy vector sums from device to host:
-  hipErrorCheck(hipMemcpy(h_sums, d_sums, DSIZE*sizeof(float), hipMemcpyDeviceToHost));
-    
-  if (!validate(h_sums, DSIZE)) return -1; 
+  hipErrorCheck(
+      hipMemcpy(h_sums, d_sums, DSIZE * sizeof(float), hipMemcpyDeviceToHost));
+
+  if (!validate(h_sums, DSIZE))
+    return -1;
   printf("row sums correct!\n");
-    
+
   // zeros out the d_sums array
-  hipErrorCheck(hipMemset(d_sums, 0, DSIZE*sizeof(float)));
-    
-  hipLaunchKernelGGL(column_sums, dim3(grid_size), dim3(block_size), 0, 0, d_A, d_sums, DSIZE);
-  // Check for errors in kernel launch (e.g. invalid execution configuration paramters)
+  hipErrorCheck(hipMemset(d_sums, 0, DSIZE * sizeof(float)));
+
+  hipLaunchKernelGGL(column_sums, dim3(grid_size), dim3(block_size), 0, 0, d_A,
+                     d_sums, DSIZE);
+  // Check for errors in kernel launch (e.g. invalid execution configuration
+  // paramters)
   hipErrorCheck(hipGetLastError());
   // Check for errors on the GPU after control is returned to CPU
   hipErrorCheck(hipDeviceSynchronize());
-    
+
   // copy vector sums from device to host:
-  hipErrorCheck(hipMemcpy(h_sums, d_sums, DSIZE*sizeof(float), hipMemcpyDeviceToHost));
-    
-  if (!validate(h_sums, DSIZE)) return -1; 
+  hipErrorCheck(
+      hipMemcpy(h_sums, d_sums, DSIZE * sizeof(float), hipMemcpyDeviceToHost));
+
+  if (!validate(h_sums, DSIZE))
+    return -1;
   printf("column sums correct!\n");
   return 0;
 }
-  

@@ -18,14 +18,94 @@ the cache and reduce the number of memory transactions is called _memory coalesc
 ### How Effective is Memory Coalescing
 
 For example, let us take the `matrix_sums_unoptimized.cpp` code. Here we are creating a
-16384x16384 matrix and each element of the matrix is 1. We have two kernels, one that
-calculates the sum of the rows, and one that calculates the sum of the columns. Much of
-the HIP calls should now look familiar to you after the seeing [the earlier module with the
-vector add example](TODO). Briefly, let us go over the `row_sums` and `column_sums` kernel
-. 
-
+16384x16384 matrix and each element of the matrix is 1. In memory, we represent this
+matrix as a 1 dimensional array. We have two kernels, one that calculates the sum of the
+rows, and one that calculates the sum of the columns. We also allocate an array of size
+16384 in the main memory and GPU memory to store the row sum or the column sum. We set the
+block size to 256 and the grid size (i.e. number of blocks) such that there are at least
+16384 threads, so one thread for each row or column we are summing. Much of
+the HIP calls should now look familiar to you after the seeing [the earlier module with
+the vector add example](TODO). Briefly, let us go over the `row_sums` and `column_sums`
+kernel .
 
 ```
+// matrix row-sum kernel
+__global__ void row_sums(const float *A, float *sums, size_t ds) {
+
+  // create typical 1D thread index from built-in variables
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  if (idx < ds) {
+    float sum = 0.0f;
+
+    // write a for loop that will cause the thread to iterate across
+    // a row, keeping a running sum, and write the result to sums
+    for (size_t i = 0; i < ds; i++)
+      sum += A[idx * ds + i];
+    sums[idx] = sum;
+  }
+}
+```
+
+The row sum is done by assigning each thread up to 16384 (i.e. the size of the matrix) one
+of the rows of the matrix. Each thread will then sum the values in that row. The `idx <
+ds` is to ensure that if there are any more threads than there are rows, the extra threads
+just no-op (ideally you would make sure that no thread is idle and avoid thread divergence
+as much as possible. In our case, we are actually starting 16384 threads because of how we
+calculate the grid size for our kernel launch, so there are no extraneous threads in this
+example. The if statement is just a precaution). Since the matrix is represented as a 1
+dimensional array, each thread needs to jump to the starting point of the row
+corresponding to its `idx` value and then sum the values in that row.
+
+```
+// matrix column-sum kernel
+__global__ void column_sums(const float *A, float *sums, size_t ds) {
+  // create typical 1D thread index from built-in variables
+
+  int idx = threadIdx.x + blockDim.x * blockIdx.x;
+  if (idx < ds) {
+    float sum = 0.0f;
+
+    // write a for loop that will cause the thread to
+    // iterate down a column, keeeping a running sum,
+    // and write the result to sums
+    for (size_t i = 0; i < ds; i++)
+      sum += A[idx + ds * i];
+    sums[idx] = sum;
+  }
+}
+```
+
+The column sum operates on the same principle as the row sum: each thread is assigned a
+column. Each thread will step to the next value in the column, which is `ds` items away
+in the 1D array from the previous value in the column. 
+
+
+#### Building and running the code
+
+Make sure you have access to a system with HIP installed with a ROCm or CUDA backend. Make
+sure you update the submit scripts with the project in the batch job directives and in the
+`OUTPUT` variable.
+
+For Summit, run the following commands
+```
+module load cuda/11.4.0
+module load hip-cuda/5.1.0
+hipcc -o matrix_sums_unoptimized matrix_sums_unoptimized.cpp
+
+# submit job
+bsub submit_summit_unoptimized.lsf
+```
+
+For Spock/Crusher
+```
+module load rocm/5.1.0
+hipcc -o matrix_sums_unoptimized matrix_sums_unoptimized.cpp
+
+# submit job
+sbatch submit_frontier_unoptimized.sbatch
+```
+
+
 
 (TODO: Try creating an example where you are summing the
 rows vs summing the columns of a matrix to show effect of memory coalescing)
