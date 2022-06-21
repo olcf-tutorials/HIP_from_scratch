@@ -2,4 +2,6 @@
 *~
 *.qdrep
 *.sqlite
+*.jsron
+*.qdstrm
 [#]*[#]

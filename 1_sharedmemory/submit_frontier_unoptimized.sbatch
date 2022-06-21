@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -A PROJ123
+#SBATCH -A STF007uanofn
 #SBATCH -J matrix_sums_unoptimized
 #SBATCH -o %x-%j.out
 #SBATCH -N 1
@@ -8,4 +8,7 @@
 
 module load rocm/5.1.0
 
-srun -N1 -n1 -c1 --gpus-per-task=1 rocprof --stats -i metrics_matrix_sums_unoptimized_kernels.txt -o metrix_matrix_sums_unoptimized.csv ./matrix_sums_unoptimized
+OUTPUT=/gpfs/alpine/stf007/scratch/${USER}
+srun -N1 -n1 -c1 --gpus-per-task=1 rocprof --stats -i metrics_matrix_sums_kernels.txt -o $OUTPUT/metrics_matrix_sums_unoptimized.csv ./matrix_sums_unoptimized
+
+cp $OUTPUT/metrics_matrix_sums_unoptimized.*csv $SLURM_SUBMIT_DIR
