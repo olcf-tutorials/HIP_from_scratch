@@ -259,6 +259,9 @@ earlier so we can inspect it.
 Fundamentals of HIP programming: [https://developer.amd.com/resources/rocm-learning-center/fundamentals-of-hip-programming/](https://developer.amd.com/resources/rocm-learning-center/fundamentals-of-hip-programming/)
 AMD GPU hardware: https://www.youtube.com/watch?v=uu-3aEyesWQ
 Main AMD documentation: https://docs.amd.com/
+GPU Programming Concepts (Part 1): https://www.youtube.com/watch?v=LG9G4aA28rU
+GPU Programming Concepts (Part 2): https://www.youtube.com/watch?v=i0GzebZKi10
+GPU Programming Concepts (Part 3): https://www.youtube.com/watch?v=cUHvdxanRyM
 
 ## Exercises
 TODO: add exercises
