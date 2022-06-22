@@ -126,6 +126,8 @@ CUDA Kernel Statistics:
 You will notice that the `row_sums` kernel is actually slower than the `column_sums`
 kernel. Why is that?
 
+![row_sum and column_sum memory access](rowsum_columnsum.png)
+
 This is because the `column_sums` kernel actually makes better use of _memory
 coalescing_. Recall that when you read a piece of data from memory, it will load that
 memory into the cache along with some data that was adjacent to it because there is a
@@ -162,10 +164,13 @@ rocprof on crusher and show the performance differences).
 # GPU Shared Memory with HIP
 
 So how do we improve the performance of the sum of the rows. We can take advantage of GPU
-shared memory to bring the data even closer to the threads (TODO: is the LDS on the
-CUs?). This is called Local Data Share or LDS. Let us look at a modified example of the row
-sum kernel in (TODO: filename). Whereas column sum is taking advantage of the cache lines
-(TODO: explain how cache lines are set up on the GPU). 
+shared memory to bring the data even closer to the threads to avoid all the memory
+transactions to the GPU memory.  (TODO: is the LDS on the
+CUs?). This shared memory is called Local Data Share or LDS. Each block can have a maximum
+of (TODO: size) kb of LDS. Let us look at a modified example of the row
+sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged but the
+`row_sums` kernel has been reworked  Whereas column sum is taking advantage of the
+cache locality, the row sum kernel will explicitly move the data into shared memory. 
 
 (TODO: show how to run profiler on Summit and crusher and compare results with previous row sum run that didn't use
 shared memory)
