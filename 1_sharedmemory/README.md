@@ -206,7 +206,7 @@ __global__ void row_sums(const float *A, float *sums, size_t ds) {
 }
 ```
 
-![optimized row sums](optimized_rowsum.png)
+![optimized row sums](optimized_rowsum.png]
 
 We create the LDS with `__shared__ float sdata[block_size]` to create a float array in
 shared memory. In the while loop, each thread in the block will sum the numbers in the row
