@@ -1,5 +1,3 @@
-Tutorial for shared memory features for GPU
-
 # Memory Coalescing
 (TODO: the developer.amd matrix transpose example isn't really a good example of memory
 coalescing as it looks like the number of write and read transactions is more or less the
@@ -15,7 +13,7 @@ structure your kernel code such that adjacent threads in a block access adjacent
 maximize use of the cache. This way of organizing your data access to take advantage of
 the cache and reduce the number of memory transactions is called _memory coalescing_.
 
-## How Effective is Memory Coalescing
+## How Effective is Memory Coalescing?
 
 For example, let us take the `matrix_sums_unoptimized.cpp` code. Here we are creating a
 16384x16384 matrix and each element of the matrix is 1. In memory, we represent this
@@ -161,15 +159,15 @@ rocprof on crusher and show the performance differences).
 # GPU Shared Memory with HIP
 
 So how do we improve the performance of the sum of the rows. We can take advantage of
-block level
-shared memory to bring the data even closer to the threads to avoid all the memory
-transactions to the GPU memory.  (TODO: is the LDS on the
-CUs?). This shared memory is called Local Data Share or LDS. Each block can have a maximum
-of (TODO: size) kb of LDS and this memory lives on (TODO: where?). This LDS is visible
-only within a block. If there are multiple blocks, each block will have its own LDS. Let us look at a modified example of the row
-sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged but the
-`row_sums` kernel has been reworked  Whereas column sum is taking advantage of the
-cache locality, the row sum kernel will explicitly move the data into shared memory. 
+block level shared memory to bring the data even closer to the threads to avoid all the
+memory transactions to the GPU memory.  (TODO: is the LDS on the CUs?). This shared memory
+is called Local Data Share or LDS. Each block can have a maximum of (TODO: size) kb of LDS
+and this memory lives on (TODO: where?). This LDS is visible only within a block. If there
+are multiple blocks, each block will have its own LDS. Let us look at a modified example
+of the row sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged
+but the `row_sums` kernel has been reworked. Whereas column sum is taking advantage of the
+cache locality, the row sum kernel will explicitly move the data into block level shared
+memory.
 
 Let us break down the modified `row_sums` kernel. A thing to note is that is launch kernel
 call
@@ -208,21 +206,24 @@ __global__ void row_sums(const float *A, float *sums, size_t ds) {
 }
 ```
 
+![optimized row sums](optimized_rowsum.png]
+
 We create the LDS with `__shared__ float sdata[block_size]` to create a float array in
 shared memory. In the while loop, each thread in the block will sum the numbers in the row
-starting from the location corresponding to its `threadIdx.x` and each next number that is
+starting from the location corresponding to its `tid` and each next number that is
 `blockDim.x` distance away till it reaches the end of the row, and this sum is stored in
-the LDS array. Each block will then perform a _parallel sweep reduction_ on the LDS
-array. In the for loop, we will start with half the threads in the block, where each
-thread will sum the numbers at `tid` position and `tid+s` position where `s` is half the
-block size and `tid` is the thread ID. The sum for each thread is stored in the LDS array
-at `sdata[tid]`. In the next iteration, the `s` value is halved, so now only a quarter of
-the threads in the block are used to sum the numbers at `tid` and `tid+s`. This halving
+the LDS array at the location corresponding to that thread's `tid`. Each block will then
+perform a _parallel sweep reduction_ on the LDS array. In the for loop, we will start with
+half the threads in the block, where each thread will sum the numbers at `tid` position
+and `tid+s` position in the LDS `sdata` where `s` is half the block size and `tid` is the
+thread's `threadIdx.x`.  The sum for each thread is stored in the LDS array at
+`sdata[tid]`. In the next iteration, the `s` value is halved, so now only a quarter of the
+threads in the block are used to sum the numbers at `tid` and `tid+s`. This halving
 continues until `s` is 0 and `sdata[0]` will be the sum of all the numbers in `sdata` that
 was inserted during the earlier while loop, and thus it is the sum of all the numbers in
-the row that block was assigned to.
+the row that block was assigned to. `__syncthreads()` ensures that all the threads in the
+block will reach that location first before any thread moves to the next instruction.
 
-(TODO: add diagram to explain the above)
 
 ### Building and running the code
 
@@ -255,8 +256,8 @@ sbatch submit_frontier_optimized.sbatch
 The submit scripts for Summit and Crusher run the executable with the nsys profiler and
 the rocprof profiler respectively.
 
-(TODO: show how to run profiler on Summit and crusher and compare results with previous row sum run that didn't use
-shared memory)
+(TODO: show how to run profiler on Summit and crusher and compare results with previous
+row sum run that didn't use shared memory)
 
 ### Examining the Results of the Kernel Profiling
 
@@ -264,9 +265,20 @@ From the output file of the Summit run, you will see a section titled `CUDA Kern
 Statistics` with the table summarizing the run time of the two kernels. It will look
 something like this. 
 
+```
+CUDA Kernel Statistics:
 
+ Time(%)  Total Time (ns)  Instances  Average (ns)  Minimum (ns)  Maximum (ns)  StdDev (ns)                         Name
+ -------  ---------------  ---------  ------------  ------------  ------------  -----------  --------------------------------------------------
+    61.6          2151316          1     2151316.0       2151316       2151316          0.0  column_sums(const float *, float *, unsigned long)
+    38.4          1342203          1     1342203.0       1342203       1342203          0.0  row_sums(const float *, float *, unsigned long)
+```
 
+You can see that this time `row_sums` is actually faster than `column_sums` this
+time. Effective use of the LDS brings the data even closer to the threads and saves a lot
+of time over directly operating on GPU memory. (TODO: can we word this better?). 
 
+<!--
 ## Memory banks and bank conflicts
 TODO: clean up and add accurate information.
 TODO: we can use the matrix transpose example here as we found it is a good example to use 
@@ -301,6 +313,7 @@ out the bank conflict information)
 ## Building and running the example with a profiler
 
 
+
 TODOs:
 1. What is the maximum shared memory in the AMD GPUs?
 2. How are memory banks set up? how many memory banks constitute shared memory? how much
@@ -309,3 +322,5 @@ TODOs:
 4. Why do you want to use shared memory?
 5. Why do you use __syncthreads? (to avoid race conditions between threads in the same block accessing the shared memory).
 
+
+-->
