@@ -1,6 +1,6 @@
 Tutorial for shared memory features for GPU
 
-## Memory Coalescing
+# Memory Coalescing
 (TODO: the developer.amd matrix transpose example isn't really a good example of memory
 coalescing as it looks like the number of write and read transactions is more or less the
 same between the naive and lds examples.)
@@ -15,7 +15,7 @@ structure your kernel code such that adjacent threads in a block access adjacent
 maximize use of the cache. This way of organizing your data access to take advantage of
 the cache and reduce the number of memory transactions is called _memory coalescing_.
 
-### How Effective is Memory Coalescing
+## How Effective is Memory Coalescing
 
 For example, let us take the `matrix_sums_unoptimized.cpp` code. Here we are creating a
 16384x16384 matrix and each element of the matrix is 1. In memory, we represent this
@@ -80,7 +80,7 @@ column. Each thread will step to the next value in the column, which is `ds` ite
 in the 1D array from the previous value in the column. 
 
 
-#### Building and running the code
+### Building and running the code
 
 Make sure you have access to a system with HIP installed with a ROCm or CUDA backend. Make
 sure you update the submit scripts with the project in the batch job directives and in the
@@ -108,7 +108,7 @@ sbatch submit_frontier_unoptimized.sbatch
 The submit scripts for Summit and Crusher run the executable with the nsys profiler and
 the rocprof profiler respectively.
 
-#### Examining the Results of the Kernel Profiling
+### Examining the Results of the Kernel Profiling
 
 From the output file of the Summit run, you will see a section titled `CUDA Kernel
 Statistics` with the table summarizing the run time of
@@ -134,11 +134,11 @@ memory into the cache along with some data that was adjacent to it because there
 reasonable assumption that if you need some data you will likely also need the data next
 to it. We can take advantage of this by making sure that threads that are adjacent to each
 other (i.e. threads in the same block or same wavefront even) make use data that is
-adjacent to each other. So for `column_sums`, when thread with `idx 0` accesses A[0], `idx
-1` accesses A[1], `idx 2` accesses A[2] and so on. Since A[1], A[2], A[3] are all adjacent
-to each other, they will all brought to the cache together, and we don't have to do
-separate memory lookups for getting the data for `idx 2` and `idx 3` which are executing
-in the same wavefront. This saves a lot of time.
+adjacent to each other. As you can see from the figure above, for `column_sums`, when
+thread with `idx 0` accesses A[0], `idx 1` accesses A[1], `idx 2` accesses A[2] and so
+on. Since A[1], A[2], A[3] are all adjacent to each other, they will all brought to the
+cache together, and we don't have to do separate memory lookups for getting the data for
+`idx 2` and `idx 3` which are executing in the same wavefront. This saves a lot of time.
 
 Contrast this with `row_sums`. When `idx 0` accesses A[0], `idx 1` is accessing `A[1*ds ==
 16384]`, `idx 2` is accessing `A[2*ds == 32768]` and so on. Since `idx` 0,1,2 are all in
@@ -150,30 +150,120 @@ is held up because each thread in the wavefront is effectively being serviced on
 time rather than all at once. So you can see how this can slow things down a lot. There is
 no _memory coalescing_ here.
 
-(TODO: draw a diagram to accompany the above explanation).
 
 (TODO: when rocprof timing information is fixed, add a section covering the rocprof output
 as well).
 
 
-(TODO: Try creating an example where you are summing the
-rows vs summing the columns of a matrix to show effect of memory coalescing)
 (TODO: show instructions on how to run the nvidia profiler on this for summit and the
 rocprof on crusher and show the performance differences).
 
 # GPU Shared Memory with HIP
 
-So how do we improve the performance of the sum of the rows. We can take advantage of GPU
+So how do we improve the performance of the sum of the rows. We can take advantage of
+block level
 shared memory to bring the data even closer to the threads to avoid all the memory
 transactions to the GPU memory.  (TODO: is the LDS on the
 CUs?). This shared memory is called Local Data Share or LDS. Each block can have a maximum
-of (TODO: size) kb of LDS. Let us look at a modified example of the row
+of (TODO: size) kb of LDS and this memory lives on (TODO: where?). This LDS is visible
+only within a block. If there are multiple blocks, each block will have its own LDS. Let us look at a modified example of the row
 sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged but the
 `row_sums` kernel has been reworked  Whereas column sum is taking advantage of the
 cache locality, the row sum kernel will explicitly move the data into shared memory. 
 
+Let us break down the modified `row_sums` kernel. A thing to note is that is launch kernel
+call
+
+```
+hipLaunchKernelGGL(row_sums, dim3(DSIZE), dim3(block_size), 0, 0, d_A, d_sums, DSIZE);
+```
+
+We are actually starting `DSIZE` number of blocks, so we make use of a whole block of
+threads for each row in the matrix, unlike before where we start enough blocks such that
+we have one thread for each row instead of a whole block.
+
+```
+__global__ void row_sums(const float *A, float *sums, size_t ds) {
+
+  int idx = blockIdx.x; // our block index becomes our row indicator
+  if (idx < ds) {
+    __shared__ float sdata[block_size];
+    int tid = threadIdx.x;
+    sdata[tid] = 0.0f;
+    size_t tidx = tid;
+
+    while (tidx < ds) { // block stride loop to load data
+      sdata[tid] += A[idx * ds + tidx];
+      tidx += blockDim.x;
+    }
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+      __syncthreads();
+      if (tid < s) // parallel sweep reduction
+        sdata[tid] += sdata[tid + s];
+    }
+    if (tid == 0)
+      sums[idx] = sdata[0];
+  }
+}
+```
+
+We create the LDS with `__shared__ float sdata[block_size]` to create a float array in
+shared memory. In the while loop, each thread in the block will sum the numbers in the row
+starting from the location corresponding to its `threadIdx.x` and each next number that is
+`blockDim.x` distance away till it reaches the end of the row, and this sum is stored in
+the LDS array. Each block will then perform a _parallel sweep reduction_ on the LDS
+array. In the for loop, we will start with half the threads in the block, where each
+thread will sum the numbers at `tid` position and `tid+s` position where `s` is half the
+block size and `tid` is the thread ID. The sum for each thread is stored in the LDS array
+at `sdata[tid]`. In the next iteration, the `s` value is halved, so now only a quarter of
+the threads in the block are used to sum the numbers at `tid` and `tid+s`. This halving
+continues until `s` is 0 and `sdata[0]` will be the sum of all the numbers in `sdata` that
+was inserted during the earlier while loop, and thus it is the sum of all the numbers in
+the row that block was assigned to.
+
+(TODO: add diagram to explain the above)
+
+### Building and running the code
+
+This process should be familiar to you by now.
+
+
+Make sure you have access to a system with HIP installed with a ROCm or CUDA backend. Make
+sure you update the submit scripts with the project in the batch job directives and in the
+`OUTPUT` variable.
+
+For Summit, run the following commands
+```
+module load cuda/11.4.0
+module load hip-cuda/5.1.0
+hipcc -o matrix_sums_optimized matrix_sums_optimized.cpp
+
+# submit job
+bsub submit_summit_optimized.lsf
+```
+
+For Spock/Crusher
+```
+module load rocm/5.1.0
+hipcc -o matrix_sums_optimized matrix_sums_optimized.cpp
+
+# submit job
+sbatch submit_frontier_optimized.sbatch
+```
+
+The submit scripts for Summit and Crusher run the executable with the nsys profiler and
+the rocprof profiler respectively.
+
 (TODO: show how to run profiler on Summit and crusher and compare results with previous row sum run that didn't use
 shared memory)
+
+### Examining the Results of the Kernel Profiling
+
+From the output file of the Summit run, you will see a section titled `CUDA Kernel
+Statistics` with the table summarizing the run time of the two kernels. It will look
+something like this. 
+
 
 
 

@@ -66,7 +66,8 @@ bool validate(float *data, size_t sz) {
     }
   return true;
 }
-intructuring your kernel bbb main() {
+
+int main() {
 
   float *h_A, *h_sums, *d_A, *d_sums;
   h_A = new float[DSIZE * DSIZE]; // allocate space for data in host memory
