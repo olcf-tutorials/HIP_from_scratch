@@ -48,6 +48,13 @@ __global__ void column_sums(const float *A, float *sums, size_t ds) {
   }
 }
 
+// empty kernel to jump start the GPU and get correct rocprof outputs
+__global__ void init_kernel(int b) {
+  int a = 12;
+  int c;
+  c = a+b;
+}
+
 bool validate(float *data, size_t sz) {
   for (size_t i = 0; i < sz; i++)
     if (data[i] != (float)sz) {
@@ -59,6 +66,16 @@ bool validate(float *data, size_t sz) {
 }
 
 int main() {
+
+  // running init_kernel to initialize GPU
+  hipLaunchKernelGGL(init_kernel, dim3(grid_size), dim3(block_size), 0, 0, 23);
+  // Check for errors in kernel launch (e.g. invalid execution configuration
+  // paramters)
+  hipErrorCheck(hipGetLastError());
+  // Check for errors on the GPU after control is returned to CPU
+  hipErrorCheck(hipDeviceSynchronize());
+  
+
   float *h_A, *h_sums, *d_A, *d_sums;
   h_A = new float[DSIZE * DSIZE]; // allocate space for data in host memory
   h_sums = new float[DSIZE]();

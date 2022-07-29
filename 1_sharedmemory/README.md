@@ -1,7 +1,10 @@
 # Memory Coalescing
+
 (TODO: the developer.amd matrix transpose example isn't really a good example of memory
 coalescing as it looks like the number of write and read transactions is more or less the
 same between the naive and lds examples.)
+(TODO: now that we know rocprof is kinda stupid unless you run a kernel solely to initialize
+the GPU. Try running rocprof again.)
 
 Effective use of cache is something to keep in mind while doing GPU operations. When a
 memory access to data in the GPU memory occurs, a block of data is actually brought into
@@ -96,7 +99,7 @@ bsub submit_summit_unoptimized.lsf
 
 For Spock/Crusher
 ```
-module load rocm/5.1.0
+module load rocm/5.2.0
 hipcc -o matrix_sums_unoptimized matrix_sums_unoptimized.cpp
 
 # submit job
@@ -148,10 +151,8 @@ is held up because each thread in the wavefront is effectively being serviced on
 time rather than all at once. So you can see how this can slow things down a lot. There is
 no _memory coalescing_ here.
 
-
 (TODO: when rocprof timing information is fixed, add a section covering the rocprof output
 as well).
-
 
 (TODO: show instructions on how to run the nvidia profiler on this for summit and the
 rocprof on crusher and show the performance differences).
@@ -160,11 +161,11 @@ rocprof on crusher and show the performance differences).
 
 So how do we improve the performance of the sum of the rows. We can take advantage of
 block level shared memory to bring the data even closer to the threads to avoid all the
-memory transactions to the GPU memory.  (TODO: is the LDS on the CUs?). This shared memory
-is called Local Data Share or LDS. Each block can have a maximum of (TODO: size) kb of LDS
-and this memory lives on (TODO: where?). This LDS is visible only within a block. If there
-are multiple blocks, each block will have its own LDS. Let us look at a modified example
-of the row sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged
+memory transactions to the GPU memory. This shared memory is called Local Data Store or
+LDS. Each block can have a maximum of 64KiB (65536 bytes) of LDS and this memory lives on
+the CU (TODO: citation needed). This LDS is visible only within a block. If there are
+multiple blocks, each block will have its own LDS. Let us look at a modified example of
+the row sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged
 but the `row_sums` kernel has been reworked. Whereas column sum is taking advantage of the
 cache locality, the row sum kernel will explicitly move the data into block level shared
 memory.
@@ -222,13 +223,13 @@ threads in the block are used to sum the numbers at `tid` and `tid+s`. This halv
 continues until `s` is 0 and `sdata[0]` will be the sum of all the numbers in `sdata` that
 was inserted during the earlier while loop, and thus it is the sum of all the numbers in
 the row that block was assigned to. `__syncthreads()` ensures that all the threads in the
-block will reach that location first before any thread moves to the next instruction.
+block will reach that location first before any thread moves to the next instruction. This
+prevents race conditions.
 
 
 ### Building and running the code
 
 This process should be familiar to you by now.
-
 
 Make sure you have access to a system with HIP installed with a ROCm or CUDA backend. Make
 sure you update the submit scripts with the project in the batch job directives and in the
@@ -278,6 +279,10 @@ You can see that this time `row_sums` is actually faster than `column_sums` this
 time. Effective use of the LDS brings the data even closer to the threads and saves a lot
 of time over directly operating on GPU memory. (TODO: can we word this better?). 
 
+
+### Dynamic shared memory
+TODO
+
 <!--
 ## Memory banks and bank conflicts
 TODO: clean up and add accurate information.
@@ -321,6 +326,7 @@ TODOs:
 3. What is memory coalescing? How can using shared memory help?
 4. Why do you want to use shared memory?
 5. Why do you use __syncthreads? (to avoid race conditions between threads in the same block accessing the shared memory).
+6. What are the limits of block level shared memory? MI250x only hsa upto 64kb of shared memory allocatable in a kernel launch. 
 
 
 -->

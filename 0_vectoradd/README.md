@@ -264,7 +264,8 @@ GPU Programming Concepts (Part 2): https://www.youtube.com/watch?v=i0GzebZKi10
 GPU Programming Concepts (Part 3): https://www.youtube.com/watch?v=cUHvdxanRyM
 
 ## Exercises
-TODO: add exercises
 1. Try playing around with the size of the arrays, blocks, and grid size.
 2. What errors do you run into when you don't have the bounds check in the kernel? If it doesn't, why not?
 3. Try adjusting the blockSize so that it is greater than 1024. What happens?
+TODO:
+what is the answer to exercise 2
