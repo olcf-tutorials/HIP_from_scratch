@@ -68,7 +68,7 @@ bool validate(float *data, size_t sz) {
 int main() {
 
   // running init_kernel to initialize GPU
-  hipLaunchKernelGGL(init_kernel, dim3(grid_size), dim3(block_size), 0, 0, 23);
+  hipLaunchKernelGGL(init_kernel, dim3(DSIZE), dim3(block_size), 0, 0, 23);
   // Check for errors in kernel launch (e.g. invalid execution configuration
   // paramters)
   hipErrorCheck(hipGetLastError());
