@@ -1,10 +1,10 @@
 # Memory Coalescing
 
+<!--
 (TODO: the developer.amd matrix transpose example isn't really a good example of memory
 coalescing as it looks like the number of write and read transactions is more or less the
 same between the naive and lds examples.)
-(TODO: now that we know rocprof is kinda stupid unless you run a kernel solely to initialize
-the GPU. Try running rocprof again.)
+-->
 
 Effective use of cache is something to keep in mind while doing GPU operations. When a
 memory access to data in the GPU memory occurs, a block of data is actually brought into
@@ -124,6 +124,24 @@ CUDA Kernel Statistics:
     40.0          2176528          1     2176528.0       2176528       2176528          0.0  column_sums(const float *, float *, unsigned long)
 ```
 
+The Crusher run will produce a couple of files labelled
+`metrics_matrix_sums_unoptimized.csv` and `metrics_matrix_sums_unoptimized.stats.csv`. If
+you open the `metrics_matrix_sums_unoptimized.stats.csv` file with a csv pretty printer, it
+will look something like this:
+
+```
+                                                        Name | Calls | TotalDurationNs |     AverageNs |             Percentage |
+                                init_kernel(int) [clone .kd] |     1 |   5009696594793 | 5009696594793 |       99.9965743623855 |
+   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |       165115927 |     165115927 |  0.0032958137803856266 |
+column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         6504003 |       6504003 | 0.00012982383410577622 |
+```
+
+
+(Note: Ignore the `init_kernel` line. That is just an empty kernel necessary to initialize
+rocprof properly so it will calculate the duration and other metrics for our kernels
+correctly. This is an issue that will be fixed in future releases of ROCm.)
+
+
 You will notice that the `row_sums` kernel is actually slower than the `column_sums`
 kernel. Why is that?
 
@@ -151,11 +169,6 @@ is held up because each thread in the wavefront is effectively being serviced on
 time rather than all at once. So you can see how this can slow things down a lot. There is
 no _memory coalescing_ here.
 
-(TODO: when rocprof timing information is fixed, add a section covering the rocprof output
-as well).
-
-(TODO: show instructions on how to run the nvidia profiler on this for summit and the
-rocprof on crusher and show the performance differences).
 
 # GPU Shared Memory with HIP
 
@@ -163,7 +176,7 @@ So how do we improve the performance of the sum of the rows. We can take advanta
 block level shared memory to bring the data even closer to the threads to avoid all the
 memory transactions to the GPU memory. This shared memory is called Local Data Store or
 LDS. Each block can have a maximum of 64KiB (65536 bytes) of LDS and this memory lives on
-the CU (TODO: citation needed). This LDS is visible only within a block. If there are
+the CU. This LDS is visible only within a block. If there are
 multiple blocks, each block will have its own LDS. Let us look at a modified example of
 the row sum kernel in `matrix_sums_optmized.cpp`. The `column_sums` kernel is unchanged
 but the `row_sums` kernel has been reworked. Whereas column sum is taking advantage of the
@@ -210,7 +223,13 @@ __global__ void row_sums(const float *A, float *sums, size_t ds) {
 ![optimized row sums](optimized_rowsum.png)
 
 We create the LDS with `__shared__ float sdata[block_size]` to create a float array in
-shared memory. In the while loop, each thread in the block will sum the numbers in the row
+shared memory. This is statically allocated. (If you wish to dynamically allocate this
+memory instead, you will instead write `extern __shared__ float sdata[];` and the kernel
+launch will look like `hipLaunchKernelGGL(row_sums, dim3(DSIZE), dim3(block_size), sizeof(float)*block_size, 0,
+d_A, d_sums, DSIZE);` where we pass `sizeof(float)*block_size` instead of 0 to tell HIP to allocate
+that many bytes of shared memory for the each block when launching the kernel).
+
+In the while loop, each thread in the block will sum the numbers in the row
 starting from the location corresponding to its `tid` and each next number that is
 `blockDim.x` distance away till it reaches the end of the row, and this sum is stored in
 the LDS array at the location corresponding to that thread's `tid`. Each block will then
@@ -274,6 +293,20 @@ CUDA Kernel Statistics:
     61.6          2151316          1     2151316.0       2151316       2151316          0.0  column_sums(const float *, float *, unsigned long)
     38.4          1342203          1     1342203.0       1342203       1342203          0.0  row_sums(const float *, float *, unsigned long)
 ```
+
+
+The Crusher run will produce a couple of files labelled
+`metrics_matrix_sums_unoptimized.csv` and `metrics_matrix_sums_unoptimized.stats.csv`. If
+you open the `metrics_matrix_sums_unoptimized.stats.csv` file with a csv pretty printer, it
+will look something like this:
+
+```
+                                                        Name | Calls | TotalDurationNs |     AverageNs |             Percentage |
+                                init_kernel(int) [clone .kd] |     1 |   5009696594793 | 5009696594793 |       99.9965743623855 |
+   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |       165115927 |     165115927 |  0.0032958137803856266 |
+column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         6504003 |       6504003 | 0.00012982383410577622 |
+```
+
 
 You can see that this time `row_sums` is actually faster than `column_sums` this
 time. Effective use of the LDS brings the data even closer to the threads and saves a lot

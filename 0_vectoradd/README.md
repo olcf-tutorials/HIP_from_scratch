@@ -1,5 +1,3 @@
-TODO: Have someone check your draft
-
 # Basics of HIP
 
 This tutorial will walk you through the basic components of HIP through writing a simple
@@ -237,6 +235,7 @@ This launches the GPU _kernel_ we defined earlier. The parameters you see are:
   concurrency and could allow us to overlap a kernel launch in one stream while data copy
   is happening in another stream. We will cover streams in a different tutorial. [Here is a
   brief explanation of how streams work in Cuda](https://leimao.github.io/blog/CUDA-Stream/).
+* The rest of the arguments - these are the parameters that will be passed to the kernel function as its arguments.
 
 
 ```
