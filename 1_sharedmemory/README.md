@@ -301,13 +301,15 @@ you open the `metrics_matrix_sums_optimized.stats.csv` file with a csv pretty pr
 will look something like this:
 
 ```
+                                                        Name | Calls | TotalDurationNs |   AverageNs |           Percentage |
+                                init_kernel(int) [clone .kd] |     1 |     29486987205 | 29486987205 |     99.4713316207119 |
+   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |       150249981 |   150249981 |   0.5068529240424534 |
+column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         6466909 |     6466909 | 0.021815455245657957 |
 ```
 
-
-You can see that this time `row_sums` is actually faster than `column_sums` this
-time. Effective use of the LDS brings the data even closer to the threads and saves a lot
-of time over directly operating on GPU memory. (TODO: can we word this better?). 
-
+**NOTE**: This is super weird why `column_sums` is still faster than the optimized `row_sums`
+when you run this on crusher, but `row_sum` is faster than `column_sums` on Summit. What's
+happening here?
 
 
 <!--
