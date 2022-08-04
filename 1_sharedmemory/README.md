@@ -296,15 +296,11 @@ CUDA Kernel Statistics:
 
 
 The Crusher run will produce a couple of files labelled
-`metrics_matrix_sums_unoptimized.csv` and `metrics_matrix_sums_unoptimized.stats.csv`. If
-you open the `metrics_matrix_sums_unoptimized.stats.csv` file with a csv pretty printer, it
+`metrics_matrix_sums_optimized.csv` and `metrics_matrix_sums_optimized.stats.csv`. If
+you open the `metrics_matrix_sums_optimized.stats.csv` file with a csv pretty printer, it
 will look something like this:
 
 ```
-                                                        Name | Calls | TotalDurationNs |     AverageNs |             Percentage |
-                                init_kernel(int) [clone .kd] |     1 |   5009696594793 | 5009696594793 |       99.9965743623855 |
-   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |       165115927 |     165115927 |  0.0032958137803856266 |
-column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         6504003 |       6504003 | 0.00012982383410577622 |
 ```
 
 
@@ -313,8 +309,6 @@ time. Effective use of the LDS brings the data even closer to the threads and sa
 of time over directly operating on GPU memory. (TODO: can we word this better?). 
 
 
-### Dynamic shared memory
-TODO
 
 <!--
 ## Memory banks and bank conflicts
