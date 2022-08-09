@@ -4,10 +4,5 @@ programming knowledge is necessary.
 
 This a work in progress.
 
+Go in order from 0_intro onwards as they introduce the HIP concepts slowly.
 
-
-TODO:
-
-- write a monte carlo pi calculation tutorial (HIP+MPI?)
-- tutorial on shared memory and memory coalescing
-- tutorial on streams
