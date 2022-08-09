@@ -9,7 +9,8 @@ advantage of **HIP Streams**.
 The idea here is that you can create different pipes or _streams_ where to which you can
 assign different tasks that don't depend on each other and thus could execute at the same
 time and make better use of the GPU. Let us look at a couple of code examples to make this
-concrete (TODO: make code examples).
+concrete (TODO: make code examples, make an example where you're overlapping multiple
+hipblasdgemm calls with stream)
 
 (TODO: make example where streams aren't useful because the whole GPU is being saturated
 and using stream doesn't really make it go faster).

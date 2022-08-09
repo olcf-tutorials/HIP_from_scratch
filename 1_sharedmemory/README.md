@@ -1,4 +1,4 @@
-# Memory Coalescing
+# Memory Coalescing and using Shared Memory
 
 <!--
 (TODO: the developer.amd matrix transpose example isn't really a good example of memory
@@ -24,10 +24,10 @@ matrix as a 1 dimensional array. We have two kernels, one that calculates the su
 rows, and one that calculates the sum of the columns. We also allocate an array of size
 16384 in the main memory and GPU memory to store the row sum or the column sum. We set the
 block size to 256 and the grid size (i.e. number of blocks) such that there are at least
-16384 threads, so one thread for each row or column we are summing. Much of
-the HIP calls should now look familiar to you after the seeing [the earlier module with
-the vector add example](TODO). Briefly, let us go over the `row_sums` and `column_sums`
-kernel .
+16384 threads, so one thread for each row or column we are summing. Much of the HIP calls
+should now look familiar to you after the seeing [the earlier module with the vector add
+example](../0_vectoradd). Briefly, let us go over the `row_sums` and `column_sums` kernel
+.
 
 ```
 // matrix row-sum kernel
@@ -68,6 +68,7 @@ __global__ void column_sums(const float *A, float *sums, size_t ds) {
 
     // write a for loop that will cause the thread to
     // iterate down a column, keeeping a running sum,
+
     // and write the result to sums
     for (size_t i = 0; i < ds; i++)
       sum += A[idx + ds * i];
@@ -130,16 +131,12 @@ you open the `metrics_matrix_sums_unoptimized.stats.csv` file with a csv pretty 
 will look something like this:
 
 ```
-                                                        Name | Calls | TotalDurationNs |     AverageNs |             Percentage |
-                                init_kernel(int) [clone .kd] |     1 |   5009696594793 | 5009696594793 |       99.9965743623855 |
-   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |       165115927 |     165115927 |  0.0032958137803856266 |
-column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         6504003 |       6504003 | 0.00012982383410577622 |
+                                                        Name | Calls | TotalDurationNs | AverageNs |           Percentage |
+   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |        16306600 |  16306600 |    73.67918895689633 |
+column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         5800174 |   5800174 |    26.20730968619315 |
+                                init_kernel(int) [clone .kd] |     1 |           20960 |     20960 |  0.09470495385528234 |
+                           __amd_rocclr_fillBufferAligned.kd |     1 |            4160 |      4160 | 0.018796403055246876 |
 ```
-
-
-(Note: Ignore the `init_kernel` line. That is just an empty kernel necessary to initialize
-rocprof properly so it will calculate the duration and other metrics for our kernels
-correctly. This is an issue that will be fixed in future releases of ROCm.)
 
 
 You will notice that the `row_sums` kernel is actually slower than the `column_sums`
@@ -170,7 +167,7 @@ time rather than all at once. So you can see how this can slow things down a lot
 no _memory coalescing_ here.
 
 
-# GPU Shared Memory with HIP
+## GPU Shared Memory with HIP
 
 So how do we improve the performance of the sum of the rows. We can take advantage of
 block level shared memory to bring the data even closer to the threads to avoid all the
@@ -243,7 +240,7 @@ continues until `s` is 0 and `sdata[0]` will be the sum of all the numbers in `s
 was inserted during the earlier while loop, and thus it is the sum of all the numbers in
 the row that block was assigned to. `__syncthreads()` ensures that all the threads in the
 block will reach that location first before any thread moves to the next instruction. This
-prevents race conditions.
+prevents race conditions between the threads in the block as one thread.
 
 
 ### Building and running the code
@@ -276,9 +273,6 @@ sbatch submit_frontier_optimized.sbatch
 The submit scripts for Summit and Crusher run the executable with the nsys profiler and
 the rocprof profiler respectively.
 
-(TODO: show how to run profiler on Summit and crusher and compare results with previous
-row sum run that didn't use shared memory)
-
 ### Examining the Results of the Kernel Profiling
 
 From the output file of the Summit run, you will see a section titled `CUDA Kernel
@@ -301,16 +295,16 @@ you open the `metrics_matrix_sums_optimized.stats.csv` file with a csv pretty pr
 will look something like this:
 
 ```
-                                                        Name | Calls | TotalDurationNs |   AverageNs |           Percentage |
-                                init_kernel(int) [clone .kd] |     1 |     29486987205 | 29486987205 |     99.4713316207119 |
-   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |       150249981 |   150249981 |   0.5068529240424534 |
-column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         6466909 |     6466909 | 0.021815455245657957 |
+                                                        Name | Calls | TotalDurationNs | AverageNs |         Percentage |
+column_sums(float const*, float*, unsigned long) [clone .kd] |     1 |         5769797 |   5769797 |  85.01144011352152 |
+   row_sums(float const*, float*, unsigned long) [clone .kd] |     1 |          992006 |    992006 | 14.616087647668373 |
+                                init_kernel(int) [clone .kd] |     1 |           20960 |     20960 | 0.3088219195197701 |
+                           __amd_rocclr_fillBufferAligned.kd |     1 |            4320 |      4320 | 0.0636503192903343 |
 ```
 
-**NOTE**: This is super weird why `column_sums` is still faster than the optimized `row_sums`
-when you run this on crusher, but `row_sum` is faster than `column_sums` on Summit. What's
-happening here?
-
+You can see now that `row_sums` is faster than `column sums` because it also takes
+advantage of the concept of memory coalescing, but by using the GPU's shared memory
+feature to bring the data closer instead of doing cache tricks.
 
 <!--
 ## Memory banks and bank conflicts
@@ -349,12 +343,9 @@ out the bank conflict information)
 
 
 TODOs:
-1. What is the maximum shared memory in the AMD GPUs?
 2. How are memory banks set up? how many memory banks constitute shared memory? how much
    data per memory bank? How do you handle bank conflicts better?
-3. What is memory coalescing? How can using shared memory help?
 4. Why do you want to use shared memory?
-5. Why do you use __syncthreads? (to avoid race conditions between threads in the same block accessing the shared memory).
 6. What are the limits of block level shared memory? MI250x only hsa upto 64kb of shared memory allocatable in a kernel launch. 
 
 
