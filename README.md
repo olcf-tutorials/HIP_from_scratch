@@ -1,6 +1,6 @@
 This repository contains several tutorials that teach the basic concepts of HIP. These
 tutorials should not require prior knowledge of GPU or CUDA programming, although general
-programming knowledge is necessary.
+programming knowledge in C or C++ is necessary.
 
 This a work in progress.
 
