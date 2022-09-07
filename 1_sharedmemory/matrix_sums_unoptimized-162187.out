@@ -1,0 +1,13 @@
+RPL: on '220808_074523' from '/opt/rocm-5.2.0' in '/ccs/home/subil/hipstuff/HIP_from_scratch/1_sharedmemory'
+RPL: profiling '"./matrix_sums_unoptimized"'
+RPL: input file ''
+RPL: output dir '/tmp/rpl_data_220808_074523_27865'
+RPL: result dir '/tmp/rpl_data_220808_074523_27865/input_results_220808_074523'
+ROCProfiler: input from "/tmp/rpl_data_220808_074523_27865/input.xml"
+  0 metrics
+row sums correct!
+column sums correct!
+
+ROCPRofiler: 4 contexts collected, output directory /tmp/rpl_data_220808_074523_27865/input_results_220808_074523
+File '/gpfs/alpine/stf007/scratch/subil/metrics_matrix_sums_unoptimized.csv' is generating
+File '/gpfs/alpine/stf007/scratch/subil/metrics_matrix_sums_unoptimized.stats.csv' is generating

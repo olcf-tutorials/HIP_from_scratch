@@ -1,0 +1,3 @@
+Total elapsed time on single stream is 3130.001953 milliseconds as calculated by hipEvent
+Total elapsed time on single stream is 3130.022000  milliseconds as calculated by cpu
+__SUCCESS__
