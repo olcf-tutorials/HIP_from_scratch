@@ -65,19 +65,19 @@ int main(int argc, char *argv[]) {
 
   /* Allocate memory for d_A, d_B, d_C on GPU
    * ----------------------------------------*/
-  double *d_A[num_matrices];
-  double *d_B[num_matrices];
-  double *d_C[num_matrices];
-  for (int m = 0; m < num_matrices; m++) {
-    gpuErrorCheck(hipMalloc(&d_A[m], N * N * sizeof(double)));
-    gpuErrorCheck(hipMalloc(&d_B[m], N * N * sizeof(double)));
-    gpuErrorCheck(hipMalloc(&d_C[m], N * N * sizeof(double)));
+  double *d_A;
+  double *d_B;
+  double *d_C;
+ // for (int m = 0; m < num_matrices; m++) {
+    gpuErrorCheck(hipMalloc(&d_A, num_matrices * N * N * sizeof(double)));
+    gpuErrorCheck(hipMalloc(&d_B, num_matrices * N * N * sizeof(double)));
+    gpuErrorCheck(hipMalloc(&d_C, num_matrices * N * N * sizeof(double)));
 
 //  gpuErrorCheck(
 //      hipMemcpy(d_A[m], A[m], N * N * sizeof(double), hipMemcpyHostToDevice));
 //  gpuErrorCheck(
 //      hipMemcpy(d_B[m], B[m], N * N * sizeof(double), hipMemcpyHostToDevice));
-  }
+  //}
 
   const double alpha = 1.0;
   const double beta = 0.0;
