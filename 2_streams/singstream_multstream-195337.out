@@ -1,0 +1,3 @@
+running single_stream
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: *** STEP 195337.0 ON crusher011 CANCELLED AT 2022-10-07T10:08:22 ***

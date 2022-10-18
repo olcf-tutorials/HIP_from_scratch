@@ -5,6 +5,8 @@
 #include <stdio.h>
 
 // Macro for checking errors in CUDA API calls
+
+
 #define gpuErrorCheck(call)                                                    \
   do {                                                                         \
     hipError_t gpuErr = call;                                                  \
@@ -15,9 +17,36 @@
     }                                                                          \
   } while (0)
 
+//#define gpuErrorCheck(call)                                                    \
+//  do {                                                                         \
+//    hipError_t gpuErr = call;                                                  \
+//    if (hipSuccess != gpuErr) {                                                \
+//      printf("GPU Error - %s:%d: '%s' totalsize = %f\n", __FILE__, __LINE__,                 \
+//             hipGetErrorString(gpuErr), totalsize/(1024*1024));                                       \
+//      exit(0);                                                                 \
+//    }                                                                          \
+//  } while (0)
+
 const int num_matrices = 1024*1024;
-const size_t N = 32;
-//const int num_streams = 8;
+#define N  32
+const int num_streams = 8;
+
+__global__ void matrix_multiply(double *a, double *b, double *c)
+{
+    int column = blockDim.x * blockIdx.x + threadIdx.x;
+    int row    = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (row < N && column < N)
+    {
+        // dot product of row, column
+        double element = 0.0;
+        for(int i=0; i<N; i++){
+            element += a[row * N + i] * b[i * N + column];
+        }
+        
+        c[row * N + column] = element;
+    }
+}
 
 // host-based timing
 #define USECPSEC 1000000ULL
@@ -29,9 +58,9 @@ unsigned long long dtime_usec(unsigned long long start) {
 }
 
 
-
-int main(int argc, char *argv[]) {
-
+//int main(int argc, char *argv[]) {
+int main() {
+  
   // Set device to GPU 0
   gpuErrorCheck(hipSetDevice(0));
   double *A;
@@ -40,9 +69,12 @@ int main(int argc, char *argv[]) {
 
   /* Allocate memory for A, B, C on CPU
    * ----------------------------------------------*/
-    A = (double *)malloc(num_matrices*N * N * sizeof(double));
-    B = (double *)malloc(num_matrices*N * N * sizeof(double));
-    C = (double *)malloc(num_matrices*N * N * sizeof(double));
+    //A = (double *)malloc(num_matrices*N * N * sizeof(double));
+    //B = (double *)malloc(num_matrices*N * N * sizeof(double));
+    //C = (double *)malloc(num_matrices*N * N * sizeof(double));
+    gpuErrorCheck(hipHostMalloc((void**)&A, (num_matrices*N * N * sizeof(double))));
+    gpuErrorCheck(hipHostMalloc((void**)&B, (num_matrices*N * N * sizeof(double))));
+    gpuErrorCheck(hipHostMalloc((void**)&C, (num_matrices*N * N * sizeof(double))));
 
   /* Set Values for A, B, C on CPU
    * ---------------------------------------------------*/
@@ -71,31 +103,31 @@ int main(int argc, char *argv[]) {
   gpuErrorCheck(hipMalloc(&d_C, num_matrices * N * N * sizeof(double)));
 
 
-  const double alpha = 1.0;
-  const double beta = 0.0;
 
   /* Perform Matrix Multiply on GPU
    * --------------------------------------------------*/
+    dim3 threads_per_block( 16, 16, 1 );
+    dim3 blocks_in_grid( ceil( float(N) / threads_per_block.x ), ceil( float(N) / threads_per_block.y ), 1 );
 
-  hipblasHandle_t handle;
-  hipblasCreate(&handle);
+  // splitting the work across multiple streams
+
+  hipStream_t streams[num_streams];
+
+  for (int i = 0; i<num_streams; i++) {
+    gpuErrorCheck(hipStreamCreate(&streams[i]));
+  }
+
   
   // Warmup run
   gpuErrorCheck(
       hipMemcpy(d_A, A, N * N * sizeof(double), hipMemcpyHostToDevice));
   gpuErrorCheck(
       hipMemcpy(d_B, B, N * N * sizeof(double), hipMemcpyHostToDevice));
- hipblasStatus_t status =
-     hipblasDgemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, N, N, N, &alpha,
-                  d_A, N, d_B, N, &beta, d_C, N);
-   if (status != HIPBLAS_STATUS_SUCCESS) {
-     printf("hipblasDgemm failed with code %d\n", status);
-     return EXIT_FAILURE;
- }
+  hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0, 0, d_A, d_B, d_C);
   gpuErrorCheck(
       hipMemcpy(C, d_C, N * N * sizeof(double), hipMemcpyDeviceToHost));
-
-  // Actual run on a single stream, recording elapsed time
+  
+  // Actual run on multiple streams, recording elapsed time
   unsigned long long start_cpu, stop_cpu;
   long double time_elapsed_cpu;
   float time_elapsed_hipEvent;
@@ -107,28 +139,19 @@ int main(int argc, char *argv[]) {
   start_cpu = dtime_usec(0);
   gpuErrorCheck(hipEventRecord(start));
 
+  gpuErrorCheck(
+      hipMemcpy(d_A, A, num_matrices * N * N * sizeof(double), hipMemcpyHostToDevice));
+  gpuErrorCheck(
+      hipMemcpy(d_B, B, num_matrices * N * N * sizeof(double), hipMemcpyHostToDevice));
+
+  // The copy matrices, run kernel, copy result loop
   for (int m = 0; m < num_matrices; m++) {
-  gpuErrorCheck(
-      hipMemcpy(&d_A[m*N*N], &A[m*N*N], N * N * sizeof(double), hipMemcpyHostToDevice));
-  gpuErrorCheck(
-      hipMemcpy(&d_B[m*N*N], &B[m*N*N], N * N * sizeof(double), hipMemcpyHostToDevice));
-
-  status =
-        hipblasDgemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, N, N, N, &alpha,
-                     &d_A[m*N*N], N, &d_B[m*N*N], N, &beta, &d_C[m*N*N], N);
-    if (status != HIPBLAS_STATUS_SUCCESS) {
-      printf("hipblasDgemm failed with code %d\n", status);
-      return EXIT_FAILURE;
-    }
-
-  gpuErrorCheck(
-      hipMemcpy(&C[m*N*N], &d_C[m*N*N], N * N * sizeof(double), hipMemcpyDeviceToHost));
-
- // stop_cpu = dtime_usec(0);
- // time_elapsed_cpu = (long double)(stop_cpu - start_cpu);
- // printf("Time elapsed from start: %Lf  milliseconds as calculated by cpu\n",
- //        time_elapsed_cpu/1000 );
+    int stream_number = m % num_streams;
+  
+  hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0, streams[stream_number], &d_A[m*N*N], &d_B[m*N*N],  &d_C[m*N*N]);
   }
+  gpuErrorCheck(
+      hipMemcpy(C, d_C, num_matrices * N * N * sizeof(double), hipMemcpyDeviceToHost));
 
   gpuErrorCheck(hipDeviceSynchronize());
   gpuErrorCheck(hipEventRecord(stop));
@@ -138,19 +161,20 @@ int main(int argc, char *argv[]) {
  
   gpuErrorCheck(hipEventElapsedTime(&time_elapsed_hipEvent, start, stop));
   time_elapsed_cpu = (long double)(stop_cpu - start_cpu);
-
-  printf("single stream %f milliseconds hipEvent\n",
+  printf("multiple streams %f milliseconds hipEvent\n",
          time_elapsed_hipEvent );
-  printf("single stream %Lf milliseconds cpu\n",
+  printf("multiple streams %Lf milliseconds cpu\n",
          time_elapsed_cpu/1000 );
-  
-  
+
 
 
   /* Clean up and output
    * --------------------------------------------------------------*/
 
-  hipblasDestroy(handle);
+
+  for (int i=0; i<num_streams; i++) {
+    gpuErrorCheck(hipStreamDestroy(streams[i]));
+  }
 
     // Free GPU memory
     gpuErrorCheck(hipFree(d_A));
@@ -159,9 +183,9 @@ int main(int argc, char *argv[]) {
 
     // Free CPU memory
     // free(C_fromGPU);
-    free(A);
-    free(B);
-    free(C);
+    gpuErrorCheck(hipHostFree(A));
+    gpuErrorCheck(hipHostFree(B));
+    gpuErrorCheck(hipHostFree(C));
 
   printf("__SUCCESS__\n");
 

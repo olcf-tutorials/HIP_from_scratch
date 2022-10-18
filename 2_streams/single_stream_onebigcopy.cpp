@@ -68,26 +68,17 @@ int main(int argc, char *argv[]) {
   double max_value = 10.0;
 
   // Set A, B, C
-  for (int i = 0; i < (num_matrices * N * N); i++) {
-    A[i] = (double)rand() / (double)(RAND_MAX / max_value);
-    B[i] = (double)rand() / (double)(RAND_MAX / max_value);
-    C[i] = 0.0;
+  for (int m = 0; m < num_matrices; m++) {
+    for (int i = 0; i < N; i++) {
+      for (int j = 0; j < N; j++) {
+        A[(m * N * N) + (i * N + j)] =
+            (double)rand() / (double)(RAND_MAX / max_value);
+        B[(m * N * N) + (i * N + j)] =
+            (double)rand() / (double)(RAND_MAX / max_value);
+        C[(m * N * N) + (i * N + j)] = 0.0;
+      }
+    }
   }
-
-  // This was just another convoluted way of filling the arrays
-  // that showed how we go one matrix at a time instead just doing it in a single loop
-  // like above which would've accomplished the same thing
-  //  for (int m = 0; m < num_matrices; m++) {
-  //    for (int i = 0; i < N; i++) {
-  //      for (int j = 0; j < N; j++) {
-  //        A[(m * N * N) + (i * N + j)] =
-  //            (double)rand() / (double)(RAND_MAX / max_value);
-  //        B[(m * N * N) + (i * N + j)] =
-  //            (double)rand() / (double)(RAND_MAX / max_value);
-  //        C[(m * N * N) + (i * N + j)] = 0.0;
-  //      }
-  //    }
-  //  }
 
   /* Allocate memory for d_A, d_B, d_C on GPU
    * ----------------------------------------*/
@@ -127,19 +118,22 @@ int main(int argc, char *argv[]) {
   start_cpu = dtime_usec(0);
   gpuErrorCheck(hipEventRecord(start));
 
+   
+  gpuErrorCheck(
+      hipMemcpy(d_A, A, num_matrices*N * N * sizeof(double), hipMemcpyHostToDevice));
+  gpuErrorCheck(
+      hipMemcpy(d_B, B, num_matrices*N * N * sizeof(double), hipMemcpyHostToDevice));
   // The copy matrices, run kernel, copy result loop
   for (int m = 0; m < num_matrices; m++) {
-    gpuErrorCheck(hipMemcpy(&d_A[m * N * N], &A[m * N * N],
-                            N * N * sizeof(double), hipMemcpyHostToDevice));
-    gpuErrorCheck(hipMemcpy(&d_B[m * N * N], &B[m * N * N],
-                            N * N * sizeof(double), hipMemcpyHostToDevice));
 
     hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0, 0,
                        &d_A[m * N * N], &d_B[m * N * N], &d_C[m * N * N]);
 
-    gpuErrorCheck(hipMemcpy(&C[m * N * N], &d_C[m * N * N],
-                            N * N * sizeof(double), hipMemcpyDeviceToHost));
+
   }
+
+  gpuErrorCheck(
+      hipMemcpy(C, d_C, num_matrices * N * N * sizeof(double), hipMemcpyDeviceToHost));
 
   gpuErrorCheck(hipDeviceSynchronize());
   gpuErrorCheck(hipEventRecord(stop));
@@ -147,31 +141,31 @@ int main(int argc, char *argv[]) {
   stop_cpu = dtime_usec(0);
 
   // verify results
-  //  int sample_matrices[10] = {0,    12,      1023,   4000,  54,
-  //                             5555, 1000000, 300234, 90123, 781235};
-  //  double *result_C;
-  //  result_C = (double *)malloc(10 * N * N * sizeof(double));
-  //
-  //  for (int mat = 0; mat < 10; mat++) {
-  //    int m = sample_matrices[mat];
-  //    double tolerance = 1.0e-12;
-  //    for (int i = 0; i < N; i++) {
-  //      for (int j = 0; j < N; j++) {
-  //        double element = 0.0;
-  //        for (int k = 0; k < N; k++) {
-  //          element +=
-  //              A[(m * N * N) + (i * N + k)] * B[(m * N * N) + (k * N + j)];
-  //        }
-  //
-  //        if (fabs(C[(m * N * N) + (i * N + j)] - element) > tolerance) {
-  //          printf("For matrix C m%d value of [%d][%d] = %0.14f instead of "
-  //                 "element = %0.14f\n",
-  //                 m, i, j, C[(m * N * N) + (i * N + j)], element);
-  //          exit(1);
-  //        }
-  //      }
-  //    }
-  //  }
+//  int sample_matrices[10] = {0,    12,      1023,   4000,  54,
+//                             5555, 1000000, 300234, 90123, 781235};
+//  double *result_C;
+//  result_C = (double *)malloc(10 * N * N * sizeof(double));
+//
+//  for (int mat = 0; mat < 10; mat++) {
+//    int m = sample_matrices[mat];
+//    double tolerance = 1.0e-12;
+//    for (int i = 0; i < N; i++) {
+//      for (int j = 0; j < N; j++) {
+//        double element = 0.0;
+//        for (int k = 0; k < N; k++) {
+//          element +=
+//              A[(m * N * N) + (i * N + k)] * B[(m * N * N) + (k * N + j)];
+//        }
+//
+//        if (fabs(C[(m * N * N) + (i * N + j)] - element) > tolerance) {
+//          printf("For matrix C m%d value of [%d][%d] = %0.14f instead of "
+//                 "element = %0.14f\n",
+//                 m, i, j, C[(m * N * N) + (i * N + j)], element);
+//          exit(1);
+//        }
+//      }
+//    }
+//  }
 
   gpuErrorCheck(hipEventElapsedTime(&time_elapsed_hipEvent, start, stop));
   time_elapsed_cpu = (long double)(stop_cpu - start_cpu);

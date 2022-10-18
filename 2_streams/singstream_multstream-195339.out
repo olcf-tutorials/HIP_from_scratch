@@ -1,0 +1,8 @@
+running single_stream
+single stream 46248.621094 milliseconds hipEvent
+single stream 46248.642000 milliseconds cpu
+__SUCCESS__
+running multiple_streams
+multiple stream 33903.328125 milliseconds hipEvent
+multiple stream 33903.352000 milliseconds cpu
+__SUCCESS__

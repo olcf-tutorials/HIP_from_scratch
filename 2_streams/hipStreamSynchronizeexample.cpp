@@ -1,9 +1,11 @@
 #include <hip/hip_runtime.h>
+#include <hipblas.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
 
 // Macro for checking errors in CUDA API calls
+
 #define gpuErrorCheck(call)                                                    \
   do {                                                                         \
     hipError_t gpuErr = call;                                                  \
@@ -16,7 +18,6 @@
 
 const int num_matrices = 1024 * 1024;
 #define N 32
-// const int num_streams = 8;
 
 __global__ void matrix_multiply(double *a, double *b, double *c) {
   int column = blockDim.x * blockIdx.x + threadIdx.x;
@@ -32,16 +33,10 @@ __global__ void matrix_multiply(double *a, double *b, double *c) {
     c[row * N + column] = element;
   }
 }
-// host-based timing
-#define USECPSEC 1000000ULL
 
-unsigned long long dtime_usec(unsigned long long start) {
-  timeval tv;
-  gettimeofday(&tv, 0);
-  return ((tv.tv_sec * USECPSEC) + tv.tv_usec) - start;
-}
 
-int main(int argc, char *argv[]) {
+// int main(int argc, char *argv[]) {
+int main() {
 
   // Set device to GPU 0
   gpuErrorCheck(hipSetDevice(0));
@@ -74,20 +69,6 @@ int main(int argc, char *argv[]) {
     C[i] = 0.0;
   }
 
-  // This was just another convoluted way of filling the arrays
-  // that showed how we go one matrix at a time instead just doing it in a single loop
-  // like above which would've accomplished the same thing
-  //  for (int m = 0; m < num_matrices; m++) {
-  //    for (int i = 0; i < N; i++) {
-  //      for (int j = 0; j < N; j++) {
-  //        A[(m * N * N) + (i * N + j)] =
-  //            (double)rand() / (double)(RAND_MAX / max_value);
-  //        B[(m * N * N) + (i * N + j)] =
-  //            (double)rand() / (double)(RAND_MAX / max_value);
-  //        C[(m * N * N) + (i * N + j)] = 0.0;
-  //      }
-  //    }
-  //  }
 
   /* Allocate memory for d_A, d_B, d_C on GPU
    * ----------------------------------------*/
@@ -100,10 +81,10 @@ int main(int argc, char *argv[]) {
 
   /* Perform Matrix Multiply on GPU
    * --------------------------------------------------*/
-
   dim3 threads_per_block(16, 16, 1);
   dim3 blocks_in_grid(ceil(float(N) / threads_per_block.x),
                       ceil(float(N) / threads_per_block.y), 1);
+
 
   // Warmup run
   gpuErrorCheck(
@@ -115,30 +96,43 @@ int main(int argc, char *argv[]) {
   gpuErrorCheck(
       hipMemcpy(C, d_C, N * N * sizeof(double), hipMemcpyDeviceToHost));
 
-  // Actual run on a single stream, recording elapsed time
-  unsigned long long start_cpu, stop_cpu;
-  long double time_elapsed_cpu;
-  float time_elapsed_hipEvent;
-  hipEvent_t start, stop;
+  // creating two streams and event that we'll synchronize with
 
-  gpuErrorCheck(hipEventCreate(&start));
-  gpuErrorCheck(hipEventCreate(&stop));
+  hipStream_t stream1;
+  hipStream_t stream2;
 
-  start_cpu = dtime_usec(0);
-  gpuErrorCheck(hipEventRecord(start));
+    gpuErrorCheck(hipStreamCreate(&stream1));
+    gpuErrorCheck(hipStreamCreate(&stream2));
+
+  hipEvent_t datatransfer;
+  gpuErrorCheck(hipEventCreate(&datatransfer));
+
 
   // The copy matrices, run kernel, copy result loop
   for (int m = 0; m < num_matrices; m++) {
-    gpuErrorCheck(hipMemcpy(&d_A[m * N * N], &A[m * N * N],
-                            N * N * sizeof(double), hipMemcpyHostToDevice));
-    gpuErrorCheck(hipMemcpy(&d_B[m * N * N], &B[m * N * N],
-                            N * N * sizeof(double), hipMemcpyHostToDevice));
+    gpuErrorCheck(hipMemcpyAsync(&d_A[m * N * N], &A[m * N * N],
+                                 N * N * sizeof(double), hipMemcpyHostToDevice,
+                                 stream1));
+    gpuErrorCheck(hipMemcpyAsync(&d_B[m * N * N], &B[m * N * N],
+                                 N * N * sizeof(double), hipMemcpyHostToDevice,
+                                 stream1));
 
-    hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0, 0,
-                       &d_A[m * N * N], &d_B[m * N * N], &d_C[m * N * N]);
+    // This will insert the datatransfer event in stream1 after the above hipMemcpy
+    // operations
+    gpuErrorCheck(hipEventRecord(datatransfer, stream1));
+    // This will block till all the operations on stream1 (up until the point where we had
+    // called hipEventRecord) is completed
+    gpuErrorCheck(hipEventSynchronize(datatransfer));
+    // The below line will essentially do the same thing as the above two lines. We block
+    // till all the operations on stream1 up till this point is completed.
+    // gpuErrorCheck(hipStreamSynchronize(stream1);
 
-    gpuErrorCheck(hipMemcpy(&C[m * N * N], &d_C[m * N * N],
-                            N * N * sizeof(double), hipMemcpyDeviceToHost));
+    hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0,
+                       stream2, &d_A[m * N * N], &d_B[m * N * N],
+                       &d_C[m * N * N]);
+    gpuErrorCheck(hipMemcpyAsync(&C[m * N * N], &d_C[m * N * N],
+                                 N * N * sizeof(double), hipMemcpyDeviceToHost,
+                                 stream1));
   }
 
   gpuErrorCheck(hipDeviceSynchronize());
@@ -146,40 +140,44 @@ int main(int argc, char *argv[]) {
   gpuErrorCheck(hipEventSynchronize(stop));
   stop_cpu = dtime_usec(0);
 
-  // verify results
-  //  int sample_matrices[10] = {0,    12,      1023,   4000,  54,
-  //                             5555, 1000000, 300234, 90123, 781235};
-  //  double *result_C;
-  //  result_C = (double *)malloc(10 * N * N * sizeof(double));
-  //
-  //  for (int mat = 0; mat < 10; mat++) {
-  //    int m = sample_matrices[mat];
-  //    double tolerance = 1.0e-12;
-  //    for (int i = 0; i < N; i++) {
-  //      for (int j = 0; j < N; j++) {
-  //        double element = 0.0;
-  //        for (int k = 0; k < N; k++) {
-  //          element +=
-  //              A[(m * N * N) + (i * N + k)] * B[(m * N * N) + (k * N + j)];
-  //        }
-  //
-  //        if (fabs(C[(m * N * N) + (i * N + j)] - element) > tolerance) {
-  //          printf("For matrix C m%d value of [%d][%d] = %0.14f instead of "
-  //                 "element = %0.14f\n",
-  //                 m, i, j, C[(m * N * N) + (i * N + j)], element);
-  //          exit(1);
-  //        }
-  //      }
-  //    }
-  //  }
+  //verify results
+   int sample_matrices[10] = {0,    12,      1023,   4000,  54,
+                              5555, 1000000, 300234, 90123, 781235};
+   double *result_C;
+   result_C = (double *)malloc(10 * N * N * sizeof(double));
+  
+   for (int mat = 0; mat < 10; mat++) {
+     int m = sample_matrices[mat];
+     double tolerance = 1.0e-12;
+     for (int i = 0; i < N; i++) {
+       for (int j = 0; j < N; j++) {
+         double element = 0.0;
+         for (int k = 0; k < N; k++) {
+           element +=
+               A[(m * N * N) + (i * N + k)] * B[(m * N * N) + (k * N + j)];
+         }
+  
+         if (fabs(C[(m * N * N) + (i * N + j)] - element) > tolerance) {
+           printf("For matrix C m%d value of [%d][%d] = %0.14f instead of "
+                  "element = %0.14f\n",
+                  m, i, j, C[(m * N * N) + (i * N + j)], element);
+           exit(1);
+         }
+       }
+     }
+   }
 
   gpuErrorCheck(hipEventElapsedTime(&time_elapsed_hipEvent, start, stop));
   time_elapsed_cpu = (long double)(stop_cpu - start_cpu);
-  printf("single stream %f milliseconds hipEvent\n", time_elapsed_hipEvent);
-  printf("single stream %Lf milliseconds cpu\n", time_elapsed_cpu / 1000);
+  printf("multiple streams %f milliseconds hipEvent\n", time_elapsed_hipEvent);
+  printf("multiple streams %Lf milliseconds cpu\n", time_elapsed_cpu / 1000);
 
   /* Clean up and output
    * --------------------------------------------------------------*/
+
+  for (int i = 0; i < num_streams; i++) {
+    gpuErrorCheck(hipStreamDestroy(streams[i]));
+  }
 
   // Free GPU memory
   gpuErrorCheck(hipFree(d_A));

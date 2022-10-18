@@ -92,7 +92,7 @@ int main() {
   et1 = dtime_usec(et1);
   std::cout << "non-stream elapsed time: " << et1/(float)1000 << std::endl;
 
-#ifdef USE_STREAMS
+//#ifdef USE_STREAMS
   hipMemset(d_y, 0, ds * sizeof(ft));
 
   unsigned long long et = dtime_usec(0);
@@ -115,7 +115,7 @@ int main() {
   }
 
   std::cout << "streams elapsed time: " << et/(float)1000 << std::endl;
-#endif
+//#endif
 
   return 0;
 }

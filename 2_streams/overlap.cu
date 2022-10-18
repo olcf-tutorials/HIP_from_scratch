@@ -91,7 +91,7 @@ int main() {
   et1 = dtime_usec(et1);
   std::cout << "non-stream elapsed time: " << et1/(float)USECPSEC << std::endl;
 
-#ifdef USE_STREAMS
+//#ifdef USE_STREAMS
   cudaMemset(d_y, 0, ds * sizeof(ft));
 
   unsigned long long et = dtime_usec(0);
@@ -114,7 +114,7 @@ int main() {
   }
 
   std::cout << "streams elapsed time: " << et/(float)USECPSEC << std::endl;
-#endif
+//#endif
 
   return 0;
 }

@@ -15,9 +15,29 @@
     }                                                                          \
   } while (0)
 
+
 const int num_matrices = 1024*1024;
-const size_t N = 32;
+#define N  32
 //const int num_streams = 8;
+
+__global__ void matrix_multiply(double *a, double *b, double *c)
+{
+    int column = blockDim.x * blockIdx.x + threadIdx.x;
+    int row    = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (row < N && column < N)
+    {
+        // dot product of row, column
+        double element = 0.0;
+        for(int i=0; i<N; i++){
+            element += a[row * N + i] * b[i * N + column];
+        }
+        
+        c[row * N + column] = element;
+    }
+}
+
+
 
 // host-based timing
 #define USECPSEC 1000000ULL
@@ -34,15 +54,17 @@ int main(int argc, char *argv[]) {
 
   // Set device to GPU 0
   gpuErrorCheck(hipSetDevice(0));
-  double *A;
-  double *B;
-  double *C;
+  double *A[num_matrices];
+  double *B[num_matrices];
+  double *C[num_matrices];
 
   /* Allocate memory for A, B, C on CPU
    * ----------------------------------------------*/
-    A = (double *)malloc(num_matrices*N * N * sizeof(double));
-    B = (double *)malloc(num_matrices*N * N * sizeof(double));
-    C = (double *)malloc(num_matrices*N * N * sizeof(double));
+  for (int i = 0; i < num_matrices; i++) {
+    A[i] = (double *)malloc(N * N * sizeof(double));
+    B[i] = (double *)malloc(N * N * sizeof(double));
+    C[i] = (double *)malloc(N * N * sizeof(double));
+  }
 
   /* Set Values for A, B, C on CPU
    * ---------------------------------------------------*/
@@ -54,46 +76,46 @@ int main(int argc, char *argv[]) {
   for (int m = 0; m < num_matrices; m++) {
     for (int i = 0; i < N; i++) {
       for (int j = 0; j < N; j++) {
-        A[(m * N * N ) + (i * N + j)] = (double)rand() / (double)(RAND_MAX / max_value);
-        B[(m * N * N) + (i * N + j)] = (double)rand() / (double)(RAND_MAX / max_value);
-        C[(m * N * N) + (i * N + j)] = 0.0;
+        A[m][i * N + j] = (double)rand() / (double)(RAND_MAX / max_value);
+        B[m][i * N + j] = (double)rand() / (double)(RAND_MAX / max_value);
+        C[m][i * N + j] = 0.0;
       }
     }
   }
 
   /* Allocate memory for d_A, d_B, d_C on GPU
    * ----------------------------------------*/
-  double *d_A;
-  double *d_B;
-  double *d_C;
-  gpuErrorCheck(hipMalloc(&d_A, num_matrices * N * N * sizeof(double)));
-  gpuErrorCheck(hipMalloc(&d_B, num_matrices * N * N * sizeof(double)));
-  gpuErrorCheck(hipMalloc(&d_C, num_matrices * N * N * sizeof(double)));
+  double *d_A[num_matrices];
+  double *d_B[num_matrices];
+  double *d_C[num_matrices];
+  for (int m = 0; m < num_matrices; m++) {
+    gpuErrorCheck(hipMalloc(&d_A[m], N * N * sizeof(double)));
+    gpuErrorCheck(hipMalloc(&d_B[m], N * N * sizeof(double)));
+    gpuErrorCheck(hipMalloc(&d_C[m], N * N * sizeof(double)));
 
+//  gpuErrorCheck(
+//      hipMemcpy(d_A[m], A[m], N * N * sizeof(double), hipMemcpyHostToDevice));
+//  gpuErrorCheck(
+//      hipMemcpy(d_B[m], B[m], N * N * sizeof(double), hipMemcpyHostToDevice));
+  }
 
-  const double alpha = 1.0;
-  const double beta = 0.0;
 
   /* Perform Matrix Multiply on GPU
    * --------------------------------------------------*/
 
-  hipblasHandle_t handle;
-  hipblasCreate(&handle);
+    dim3 threads_per_block( 16, 16, 1 );
+    dim3 blocks_in_grid( ceil( float(N) / threads_per_block.x ), ceil( float(N) / threads_per_block.y ), 1 );
   
   // Warmup run
   gpuErrorCheck(
-      hipMemcpy(d_A, A, N * N * sizeof(double), hipMemcpyHostToDevice));
+      hipMemcpy(d_A[0], A[0], N * N * sizeof(double), hipMemcpyHostToDevice));
   gpuErrorCheck(
-      hipMemcpy(d_B, B, N * N * sizeof(double), hipMemcpyHostToDevice));
- hipblasStatus_t status =
-     hipblasDgemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, N, N, N, &alpha,
-                  d_A, N, d_B, N, &beta, d_C, N);
-   if (status != HIPBLAS_STATUS_SUCCESS) {
-     printf("hipblasDgemm failed with code %d\n", status);
-     return EXIT_FAILURE;
- }
+      hipMemcpy(d_B[0], B[0], N * N * sizeof(double), hipMemcpyHostToDevice));
+
+  hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0, 0, d_A[0], d_B[0], d_C[0]);
+
   gpuErrorCheck(
-      hipMemcpy(C, d_C, N * N * sizeof(double), hipMemcpyDeviceToHost));
+      hipMemcpy(C[0], d_C[0], N * N * sizeof(double), hipMemcpyDeviceToHost));
 
   // Actual run on a single stream, recording elapsed time
   unsigned long long start_cpu, stop_cpu;
@@ -109,20 +131,14 @@ int main(int argc, char *argv[]) {
 
   for (int m = 0; m < num_matrices; m++) {
   gpuErrorCheck(
-      hipMemcpy(&d_A[m*N*N], &A[m*N*N], N * N * sizeof(double), hipMemcpyHostToDevice));
+      hipMemcpy(d_A[m], A[m], N * N * sizeof(double), hipMemcpyHostToDevice));
   gpuErrorCheck(
-      hipMemcpy(&d_B[m*N*N], &B[m*N*N], N * N * sizeof(double), hipMemcpyHostToDevice));
+      hipMemcpy(d_B[m], B[m], N * N * sizeof(double), hipMemcpyHostToDevice));
 
-  status =
-        hipblasDgemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, N, N, N, &alpha,
-                     &d_A[m*N*N], N, &d_B[m*N*N], N, &beta, &d_C[m*N*N], N);
-    if (status != HIPBLAS_STATUS_SUCCESS) {
-      printf("hipblasDgemm failed with code %d\n", status);
-      return EXIT_FAILURE;
-    }
+  hipLaunchKernelGGL(matrix_multiply, blocks_in_grid, threads_per_block, 0, 0, d_A[m], d_B[m], d_C[m]);
 
   gpuErrorCheck(
-      hipMemcpy(&C[m*N*N], &d_C[m*N*N], N * N * sizeof(double), hipMemcpyDeviceToHost));
+      hipMemcpy(C[m], d_C[m], N * N * sizeof(double), hipMemcpyDeviceToHost));
 
  // stop_cpu = dtime_usec(0);
  // time_elapsed_cpu = (long double)(stop_cpu - start_cpu);
@@ -138,11 +154,11 @@ int main(int argc, char *argv[]) {
  
   gpuErrorCheck(hipEventElapsedTime(&time_elapsed_hipEvent, start, stop));
   time_elapsed_cpu = (long double)(stop_cpu - start_cpu);
-
   printf("single stream %f milliseconds hipEvent\n",
          time_elapsed_hipEvent );
   printf("single stream %Lf milliseconds cpu\n",
          time_elapsed_cpu/1000 );
+
   
   
 
@@ -150,18 +166,19 @@ int main(int argc, char *argv[]) {
   /* Clean up and output
    * --------------------------------------------------------------*/
 
-  hipblasDestroy(handle);
 
+  for (int m = 0; m < num_matrices; m++) {
     // Free GPU memory
-    gpuErrorCheck(hipFree(d_A));
-    gpuErrorCheck(hipFree(d_B));
-    gpuErrorCheck(hipFree(d_C));
+    gpuErrorCheck(hipFree(d_A[m]));
+    gpuErrorCheck(hipFree(d_B[m]));
+    gpuErrorCheck(hipFree(d_C[m]));
 
     // Free CPU memory
+    free(A[m]);
+    free(B[m]);
+    free(C[m]);
     // free(C_fromGPU);
-    free(A);
-    free(B);
-    free(C);
+  }
 
   printf("__SUCCESS__\n");
 

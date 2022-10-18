@@ -1,0 +1,61 @@
+hello my name is subil
+srun: error: crusher119: task 0: Exited with exit code 2
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: launch/slurm: _step_signal: Terminating StepId=195353.0
+6058.804688 hipEvent
+6058.826000 cpu
+ 
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: error: crusher119: task 0: Exited with exit code 2
+srun: launch/slurm: _step_signal: Terminating StepId=195353.2
+6057.115234 hipEvent
+6057.132000 cpu
+ 
+srun: error: crusher119: task 0: Exited with exit code 2
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: launch/slurm: _step_signal: Terminating StepId=195353.4
+6057.185059 hipEvent
+6057.209000 cpu
+ 
+srun: error: crusher119: task 0: Exited with exit code 2
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: launch/slurm: _step_signal: Terminating StepId=195353.6
+6056.639648 hipEvent
+6056.654000 cpu
+ 
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: error: crusher119: task 0: Exited with exit code 2
+srun: launch/slurm: _step_signal: Terminating StepId=195353.8
+6067.225586 hipEvent
+6067.242000 cpu
+ 
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: error: crusher119: task 0: Exited with exit code 2
+srun: launch/slurm: _step_signal: Terminating StepId=195353.10
+6056.185547 hipEvent
+6056.204000 cpu
+ 
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: error: crusher119: task 0: Exited with exit code 2
+srun: launch/slurm: _step_signal: Terminating StepId=195353.12
+6056.965820 hipEvent
+6056.982000 cpu
+ 
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: error: crusher119: task 0: Exited with exit code 2
+srun: launch/slurm: _step_signal: Terminating StepId=195353.14
+6066.182617 hipEvent
+6066.197000 cpu
+ 
+srun: error: crusher119: task 0: Exited with exit code 2
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: launch/slurm: _step_signal: Terminating StepId=195353.16
+6056.977539 hipEvent
+6056.992000 cpu
+ 
+srun: error: crusher119: task 0: Exited with exit code 2
+slurmstepd: error: execve(): /autofs/nccs-svm1_home1/subil/hipstuff/HIP_from_scratch/2_streams/./multiple_streams_onebigcopy: No such file or directory
+srun: launch/slurm: _step_signal: Terminating StepId=195353.18
+6055.898438 hipEvent
+6055.921000 cpu
+ 
