@@ -6,3 +6,6 @@ This a work in progress.
 
 Go in order from 0_intro onwards as they introduce the HIP concepts slowly.
 
+
+Potential topics:
+1. MPI+GPU example (pi monte carlo method?)
